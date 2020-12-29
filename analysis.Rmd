@@ -1,0 +1,363 @@
+---
+title: "Analysis"
+author: "Joseph Bulbulia"
+date: "24/12/2020"
+output: html_document
+---
+
+Notes to Suzanne:
+* Question the attention check transformation -- try to get orginal values
+* Question the decidion to code factors as numbers (below) -- to to get raw responses
+* Question where the scales came from
+* Question for NAs, what is actually missing and what is "prefer not to say" and what is "other"
+
+```{r global_options, echo=FALSE, include = FALSE}
+knitr::opts_chunk$set(#
+  fig.path="Figs/", 
+  message=FALSE, 
+  warning=FALSE,
+  collapse =TRUE,
+  echo=FALSE, 
+  #results="hide", 
+  fig.width= 10,
+  fig.height=10,
+  tidy = "styler")
+```
+
+```{r runanalysis, echo=FALSE, include = FALSE}
+source("libs.R") # libraries 
+source("funs.R") # custom functions
+```
+
+```{r}
+# import data
+d <- data_read_mymachine()
+```
+
+```{r}
+#inspect data frame
+str(d) # need to create factors, where fractors are needed.
+```
+
+Ask Suzanne for raw data. Not sure how they rescaled the ordinal report data. Just a comment. I'd never tranform the factors into numbers scaled between 0-1. This leads to a loss of information. 
+
+
+```{r}
+hist(d$rel_1)  # yikes -- factors (church freq was made into a number :(  loss of signal 
+hist(d$rel_1)  # yikes -- factors prayer freq was made into a number  :(  loss of signal
+```
+
+
+This is  unfortunate. We are saying that people who are not religious are somewhere between atheists and religious people. Need to back indocator this into a factor. 
+
+
+```{r}
+table(d$rel_3,useNA = "ifany") # This is absolutely not good. 
+```
+
+Note: here, not all NAs are created alike. 
+```{r}
+#  need to recode factors -- NAs should be NAs, otherwise, we should describe the missingness
+table(d$ethnicity,  useNA = "ifany") # need recode NA as "not identified" 
+table(d$denomination,useNA = "ifany") # need recode NA as "no denomination" 
+df$wb_socSATSEX
+# fix
+d$denomination[is.na(d$denomination)] <- "not_reported"
+d$ethnicity[is.na(d$ethnicity)] <- "not_reported"
+d$wb_soc_3[is.na(d$wb_soc_3)] <- "not_reported" # Sat with sex
+
+wb_soc_mean
+
+```
+
+```{r}
+# what are the numbers here? 
+table(d$attention_check,useNA = "ifany") 
+d$wb_phys_mean
+```
+
+```{r}
+head(d)
+# clean data: use informative names! 
+df <- d %>%
+  rename(
+    rel_CHURCHFREQ  = rel_1, # factor need to recode (eg 7 as 0)// yikes factor transformed into a number
+    rel_PRAYERFREQ = rel_2, # factor need to recode (eg. 7 as 0)// yikes factor transformed into a number
+    IS_RELIIGOUS = rel_3, # factor 1 = yes, 2 = no, 3 = atheist// yikes factor transformed into a number
+    BELONGS_DENOMINATION = rel_4, # relig
+    rel_EXTENTBELIEVEGOD = rel_5, # do you belong to a religion or religious denomination? 1 = yes, 2 = no (!)
+    rel_EXTENTBELIEVEAFTERLIFE= rel_6,
+    rel_EXTENTSPIRITUAL  = rel_7,
+    rel_IMPORTANCERELIGIOUSLIFE= rel_8, # 1 to five
+    rel_IMPORTANCEBELIEVEGOD= rel_9, # 1 to five
+    wb_genLIFEQUALITY = wb_gen_1, # not defined # also remove second underscore, which BRMS doesn't like
+    wb_genSATHEALTH = wb_gen_2, # not defined
+    wb_phyPAIN = wb_phys_1,
+    wb_physNEEDSMEDICALTREAT =  wb_phys_2,
+    wb_physHASENERGY =  wb_phys_3,
+    wb_physMOBILITY = wb_phys_4,
+    wb_physSLEEP = wb_phys_5,
+    wb_physCANDODAILYACTIVITIES  = wb_phys_6,
+    wb_physSATCAPACITYWORK  = wb_phys_7,
+    wb_psychENJOYLIFE = wb_psych_1,
+    wb_psychMEANING  = wb_psych_2,
+    wb_psychCONCENTRATE  = wb_psych_3,
+    wb_psychLIKESAPPEARANCE  = wb_psych_4,
+    wb_psychSATSELF  = wb_psych_5,
+    wb_psychANXIETY  = wb_psych_6,
+    wb_socSATPERSONALRELATIONSHIPS  = wb_soc_1,
+    wb_socSATSUPPORTFRIENDS  = wb_soc_2,
+    wb_socSATSEX   = wb_soc_3,
+    male = gender
+  )%>%
+  dplyr::mutate(IS_RELIIGOUS = as.factor(IS_RELIIGOUS),
+                denomination = as.factor(denomination),
+                ethnicity = as.factor(ethnicity),
+                country = as.factor(country))%>%
+  dplyr::mutate(IS_RELIIGOUS = recode_factor(IS_RELIIGOUS, "0" = "atheist", "0.5" = "not_religious", "1" = "religious"))
+
+```
+
+
+Note the attention check variable. The data documentation says `1` means "passed" however the questionaire lists options 1 ("not at all") -- 7 "very much."
+
+
+
+Will retain the attention check fails for now, however it iwll be important to remove these cases if they are affecting the outcomes. (I have requested further information from Suzanne)
+
+```{r}
+# get columns for different indicators 
+rel <- get_rel_vars(df)
+wbgen <- get_wb_gen(df)
+wbphys <- get_wb_phys(df)
+wbpsych <- get_wb_psych(df)
+wbsoc <- get_wb_soc(df)
+head(wbsoc)
+head(rel)
+```
+
+Exploration Graphs
+
+```{r} 
+head(rel)
+r1 <- rel %>%
+  ggplot(aes(
+    x = country,
+    y = rel_CHURCHFREQ,
+    group = country,
+    color = country
+  )) +
+  geom_boxplot(notch = TRUE) +
+  geom_point(position = "jitter", alpha = .1) +
+  scale_color_viridis(discrete = TRUE) +
+  ggtitle("Church Frequency") +
+  ylab("") + 
+  theme(axis.text.x = element_text(angle = 30))
+r1
+
+r2 <- rel %>%
+  ggplot(aes(
+    x = country,
+    y = rel_PRAYERFREQ,
+    group = country,
+    color = country
+  )) +
+  geom_boxplot(notch = TRUE) +
+  geom_point(position = "jitter", alpha = .1) +
+  scale_color_viridis(discrete = TRUE) +
+  ggtitle("Prayer Frequency") +
+  ylab("") + 
+  theme(axis.text.x = element_text(angle = 30))
+r2
+
+
+r3 <- rel %>%
+  ggplot(aes(
+    x = country,
+    y = rel_EXTENTBELIEVEGOD,
+    group = country,
+    color = country
+  )) +
+  geom_boxplot(notch = TRUE) +
+  geom_point(position = "jitter", alpha = .1) +
+  scale_color_viridis(discrete = TRUE) +
+  ggtitle("Extent Believe in God") +
+  ylab("") + 
+  theme(axis.text.x = element_text(angle = 30))
+
+r3
+
+r4 <- rel %>%
+  ggplot(aes(
+    x = country,
+    y = rel_EXTENTBELIEVEAFTERLIFE,
+    group = country,
+    color = country
+  )) +
+  geom_boxplot(notch = TRUE) +
+  geom_point(position = "jitter", alpha = .1) +
+  scale_color_viridis(discrete = TRUE) +
+  ggtitle("Extent Believe in Afterlife") +
+  ylab("") + 
+  theme(axis.text.x = element_text(angle = 30))
+r4
+
+r5 <- rel %>%
+  ggplot(aes(
+    x = country,
+    y = rel_EXTENTSPIRITUAL,
+    group = country,
+    color = country
+  )) +
+  geom_boxplot(notch = TRUE) +
+  geom_point(position = "jitter", alpha = .1) +
+  scale_color_viridis(discrete = TRUE) +
+  ggtitle("Extent Spiritual") +
+  ylab("") + 
+  theme(axis.text.x = element_text(angle = 30))
+r5
+
+r6 <- rel %>%
+  ggplot(aes(
+    x = country,
+    y = rel_IMPORTANCERELIGIOUSLIFE,
+    group = country,
+    color = country
+  )) +
+  geom_boxplot(notch = TRUE) +
+  geom_point(position = "jitter", alpha = .1) +
+  scale_color_viridis(discrete = TRUE) +
+  ggtitle("Importance of Religious Life") +
+  ylab("") + 
+  theme(axis.text.x = element_text(angle = 30))
+r6
+
+r7 <- rel %>%
+  ggplot(aes(
+    x = country,
+    y = rel_IMPORTANCEBELIEVEGOD,
+    group = country,
+    color = country
+  )) +
+  geom_boxplot(notch = TRUE) +
+  scale_color_viridis(discrete = TRUE) +
+  geom_point(position = "jitter", alpha = .1) +
+  ggtitle("Importance Believe in God") +
+  ylab("") + 
+  theme(axis.text.x = element_text(angle = 30))
+r7    
+
+(r1 + r2  +  r3 )/  (r4  + r5) / (r6 +  r7)   +  plot_annotation(tag_levels = 'A') + plot_layout(guides = "collect")
+```
+
+Correlation plots. Note that we need the to model the country level dependences in any correlation matrix, given strong cultural differences
+
+Religion: 
+
+```{r}
+rel %>%
+  correlation( partial = FALSE, multilevel = TRUE ) %>%
+  plot() + theme_blackboard()
+```
+
+```{r}
+str(rel)
+report::report_sample(
+  rel,
+  group_by = "country",
+  # select = NULL,
+  # exclude = NULL,
+  # weights = NULL, 
+  total = TRUE, digits = 2
+)
+report::report_sample(iris, group_by = "Species")
+```
+
+General wellbeing
+```{r}
+wbgen %>%
+  correlation( partial = FALSE, multilevel = TRUE ) %>%
+  plot() + theme_blackboard()
+```
+
+
+```{r}
+wbphys %>%
+  correlation( partial = FALSE, multilevel = TRUE ) %>%
+  summary()
+
+wbphys %>%
+  correlation( partial = FALSE, multilevel = TRUE ) %>%
+  plot() + theme_blackboard()
+```
+
+Psychological wellbeing
+```{r}
+wbpsych %>%
+  select(-wb_psychMEANING)%>%
+  correlation( partial = FALSE, multilevel = TRUE ) %>%
+  summary()
+
+wbpsych %>%
+  select(-wb_psychMEANING)%>%
+  correlation( partial = FALSE, multilevel = TRUE ) %>%
+  plot()  + theme_abyss()
+```
+
+```{r}
+wbsoc %>%
+  dplyr::select(-wb_socSATSEX) %>% # too many missing values
+  correlation( partial = FALSE, multilevel = TRUE ) %>%
+  summary()
+
+wbsoc %>%
+  dplyr::select(-wb_socSATSEX) %>% # too many missing values
+  correlation( partial = FALSE, multilevel = TRUE ) %>%
+  plot() + theme_abyss()
+```
+
+
+# Specify causal model
+
+
+
+
+```{r}
+head(df)
+tidy_ggdag <- dagify(
+  rel ~ age + country + male,
+  wb  ~ rel + country,
+  wb ~ soc  + ses,
+  ses ~ country + age, 
+  exposure =  "rel",
+  latent = "country",
+  outcome =   "wb") %>%
+  tidy_dagitty()
+#
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_ggdag, node_size = 14) +
+  theme(legend.position = "bottom")
+ggdag_dseparated(tidy_ggdag)
+ggdag_collider(tidy_ggdag)
+ggdag_instrumental(tidy_ggdag)å
+```
+
+
+```{r}
+head(df)
+tidy_ggdag <- dagify(
+  rel ~ age + country,
+  wb ~ soc  + ses + rel + age,
+  ses ~ country + age, 
+  exposure =  "rel",
+  latent = "country",
+  outcome =   "wb") %>%
+  tidy_dagitty()
+#
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_ggdag, node_size = 14) +
+  theme(legend.position = "bottom")
+ggdag_dseparated(tidy_ggdag)
+ggdag_collider(tidy_ggdag)
+ggdag_instrumental(tidy_ggdag)å
+```

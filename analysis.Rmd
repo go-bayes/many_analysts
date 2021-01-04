@@ -39,7 +39,7 @@ d <- data_read_mymachine()
 str(d) # need to create factors, where fractors are needed.
 ```
 
-Ask Suzanne for raw data. Not sure how they rescaled the ordinal report data. Just a comment. I'd never tranform the factors into numbers scaled between 0-1. This leads to a loss of information. 
+Ask Suzanne for raw data. Not sure how they rescaled the ordinal report data. Just a comment. I'd never trasnform the factors into numbers scaled between 0-1. This leads to a loss of information. 
 
 
 ```{r}

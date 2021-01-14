@@ -250,7 +250,7 @@ r7
 (r1 + r2  +  r3 )/  (r4  + r5) / (r6 +  r7)   +  plot_annotation(tag_levels = 'A') + plot_layout(guides = "collect")
 ```
 
-Correlation plots. Note that we need the to model the country level dependences in any correlation matrix, given strong cultural differences
+Correlation plots. Note that we need the to model the country level dependencies in any correlation matrix, given strong cultural differences
 
 Religion: 
 

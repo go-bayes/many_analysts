@@ -27,8 +27,6 @@ get_wb_soc <- function(x) {
 }
 
 
-
-
 # this code is for citing packages
 cite_packages <- function() {
   citation(package = "base", lib.loc = "/Users/josephbulbulia/Dropbox/BIBS")

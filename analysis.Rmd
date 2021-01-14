@@ -24,6 +24,7 @@ knitr::opts_chunk$set(#
   tidy = "styler")
 ```
 
+
 ```{r runanalysis, echo=FALSE, include = FALSE}
 source("libs.R") # libraries 
 source("funs.R") # custom functions
@@ -65,10 +66,8 @@ df$wb_socSATSEX
 d$denomination[is.na(d$denomination)] <- "not_reported"
 d$ethnicity[is.na(d$ethnicity)] <- "not_reported"
 d$wb_soc_3[is.na(d$wb_soc_3)] <- "not_reported" # Sat with sex
-
-wb_soc_mean
-
 ```
+
 
 ```{r}
 # what are the numbers here? 
@@ -77,21 +76,33 @@ d$wb_phys_mean
 ```
 
 ```{r}
-head(d)
-# clean data: use informative names! 
-df <- d %>%
-  rename(
-    rel_CHURCHFREQ  = rel_1, # factor need to recode (eg 7 as 0)// yikes factor transformed into a number
-    rel_PRAYERFREQ = rel_2, # factor need to recode (eg. 7 as 0)// yikes factor transformed into a number
-    IS_RELIIGOUS = rel_3, # factor 1 = yes, 2 = no, 3 = atheist// yikes factor transformed into a number
-    BELONGS_DENOMINATION = rel_4, # relig
-    rel_EXTENTBELIEVEGOD = rel_5, # do you belong to a religion or religious denomination? 1 = yes, 2 = no (!)
-    rel_EXTENTBELIEVEAFTERLIFE= rel_6,
+head(d$gender)
+
+# clean data:use informative names !
+df<- d %>%
+  dplyr::mutate(fm1m2 = ifelse( gender != "man", 1 ,2)) %>% # for indexical categorical variable
+  dplyr::mutate(male = factor(ifelse( gender != "man", "male" ,"female"))) %>%
+rename(
+    rel_CHURCHFREQ   = rel_1,
+    # factor need to recode (eg 7 as 0)// yikes factor transformed into a number
+    rel_PRAYERFREQ = rel_2,
+    # factor need to recode (eg. 7 as 0)// yikes factor transformed into a number
+    IS_RELIIGOUS = rel_3,
+    # factor 1 = yes, 2 = no, 3 = atheist// yikes factor transformed into a number
+    BELONGS_DENOMINATION = rel_4,
+    # relig
+    rel_EXTENTBELIEVEGOD = rel_5,
+    # do you belong to a religion or religious denomination? 1 = yes, 2 = no (!)
+    rel_EXTENTBELIEVEAFTERLIFE = rel_6,
     rel_EXTENTSPIRITUAL  = rel_7,
-    rel_IMPORTANCERELIGIOUSLIFE= rel_8, # 1 to five
-    rel_IMPORTANCEBELIEVEGOD= rel_9, # 1 to five
-    wb_genLIFEQUALITY = wb_gen_1, # not defined # also remove second underscore, which BRMS doesn't like
-    wb_genSATHEALTH = wb_gen_2, # not defined
+    rel_IMPORTANCERELIGIOUSLIFE = rel_8,
+    # 1 to five
+    rel_IMPORTANCEBELIEVEGOD = rel_9,
+    # 1 to five
+    wb_genLIFEQUALITY = wb_gen_1,
+    # not defined # also remove second underscore, which BRMS doesn't like
+    wb_genSATHEALTH = wb_gen_2,
+    # not defined
     wb_phyPAIN = wb_phys_1,
     wb_physNEEDSMEDICALTREAT =  wb_phys_2,
     wb_physHASENERGY =  wb_phys_3,
@@ -108,20 +119,18 @@ df <- d %>%
     wb_socSATPERSONALRELATIONSHIPS  = wb_soc_1,
     wb_socSATSUPPORTFRIENDS  = wb_soc_2,
     wb_socSATSEX   = wb_soc_3,
-    male = gender
   )%>%
   dplyr::mutate(IS_RELIIGOUS = as.factor(IS_RELIIGOUS),
                 denomination = as.factor(denomination),
                 ethnicity = as.factor(ethnicity),
-                country = as.factor(country))%>%
+                country = as.factor(country)) %>% 
   dplyr::mutate(IS_RELIIGOUS = recode_factor(IS_RELIIGOUS, "0" = "atheist", "0.5" = "not_religious", "1" = "religious"))
 
+table(df$fm1m2, useNA = "always")
 ```
 
 
 Note the attention check variable. The data documentation says `1` means "passed" however the questionaire lists options 1 ("not at all") -- 7 "very much."
-
-
 
 Will retain the attention check fails for now, however it iwll be important to remove these cases if they are affecting the outcomes. (I have requested further information from Suzanne)
 
@@ -317,47 +326,762 @@ wbsoc %>%
 ```
 
 
+
 # Specify causal model
 
+Suppose we believe that 
+
+- religion + ses + male + country + a different unmeasured latent variable (e.g. priviledge) causes well being
+
+- age + male + country + and Unmeasured latent variable (e.g. parent's religion, call this U1) causes Religion
+
+- country + age + another unmeasured latent variable (e.g. priviledge U2) causes ses
+
+- our "exposure" is religion and our outcome is "well-being"
+
+
+Which variables should I condition on to understand the relationship between religion and well-being? 
+
+```{r}
+tidy_ggdag <- dagify(
+  wb  ~ rel + ses + male + country + U2,
+  rel ~ age + male + country + U1,
+  ses ~ country + age + U2,
+  exposure =  "rel",
+  outcome =   "wb"
+) %>%
+  tidy_dagitty() 
+
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_ggdag, node_size = 14) +
+  theme(legend.position = "bottom") +
+  theme_dag_blank()
+```
+
+
+Suppose I was to include all variables in my model, except U2 and U1, which are not measured? 
+
+In this case I would introduce colider bias
+
+```{r}
+ggdag::ggdag_collider(tidy_ggdag,
+                      from = "rel",
+                      to = "wb",
+                      control_for(c("ses", "male", "country", "age")))
+
+```
+
+
+## missingness
+
+Next we need to examine patterns of missingness, which might spoil inference.
+
+```{r}
+library(naniar)
+vis_miss(df) # substantial pattern of missing ness in a few variables, 
+```
+
+There is little missingness so we will just use complete cases. Note that it would be better to have a method for handling the uncertainty of any case. A short cut is a short cut: missing data should be handled by some probabilitic imputation strategy. However because there are many larger problems about measurement error, sampling, and theory, lets set these to questions to the side and work with the complete dataset
+
+
+## The hard work
+
+We have yet to consider a mechanism by which religion might affect well-being, and specifically which aspects of well-being and which aspects of religion. Just as it might be tempting to through all variables into a regression equation, and disasterious to do so, it might be tempting to leap into some form of data reduction, and combine well-being and religious indicators without stopping to think about how causation. 
+
+There are many theories we might consider. We will focus on two non-trivial theories, one related to church attendance and one related to belief in god. If we had more time we could consider many others, but as Catholics know, "timing is everything" -- let's keep to time. 
+
+### Church attendance
+
+We propose that church attendance reduces psychological anxiety by increasing perceived support. This is a new model so we need to write our dag all over again. The dag will resemble the dag above, except we know that people who identify as male have less social support (typically), at least in some countries.
+
+
+Writing the dag
+```{r}
+tidy_ggdag2 <- dagify(
+  wb  ~ support + ses + male + country + U2,
+  support ~ church + male + country,
+  church ~ age + male + country + U1,
+  ses ~ country + age + U2,
+  exposure =  "church",
+  outcome =   "wb"
+) %>%
+  tidy_dagitty()
+
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) +
+  theme(legend.position = "bottom") +
+  theme_dag_blank()
+```
+
+The adjustments sets are the same so we proceed with a model. Note that if my interest is in the direct effect of church attendance on wellbeing I should *not* include social support because this introduces a collider bias! 
+
+```{r}
+ggdag::ggdag_collider(tidy_ggdag2,
+                      from = "church",
+                      to = "wb",
+                      controlling_for(c("male", "support", "country", "age")))
+
+```
+
+
+## The model
+
+A bayesian workflow should include prior predictive checks and the use of informative priors (McElreath 2020). 
+
+For this initial analysis I am going to use the weakly informative priors that BRMS uses; my experience is that large datasets are resistent to choice of priors. However it is a mistake to trust this experience. For now, though, we must keep to time, and timing is everything. 
+
+Additionally, the data have been manipulated in advance of the study to be scaled to a range between 0 and 1. This is a very bad idea. It would be much better to thinking of church attendance frequence as a monotonic effect. I will do that analysis at the next round, if the data are made available in their original form.
+
+
+Here is the model for church attendance and anxiety
+
+Wrangle data
+```{r}
+# get data into shape
+d1 <- df %>%
+  dplyr::mutate(
+    anx = as.numeric(wb_psychANXIETY),
+    anx_s = scale(wb_psychANXIETY),
+    #put outcome in ST units (see McElreath 2021)  # not necessary
+    age_s = scale(age),
+    ch_s = scale(rel_CHURCHFREQ),
+    mn_s = scale(wb_psychMEANING),
+    bg_s = scale(rel_EXTENTBELIEVEGOD)
+  ) %>%
+  dplyr::select(anx, anx_s, age_s, ch_s, mn_s, fm1m2, country, male, bg_s) %>%
+  dplyr::filter(
+    !is.na(anx_s),
+    !is.na(age_s),
+    !is.na(ch_s),
+    !is.na(mn_s),
+    !is.na(male),
+    !is.na(bg_s)
+  )
+table(d1$country)
+```
+
+Model for church
+
+```{r}
+m1 <- brm(
+  anx ~ ch_s +
+    age_s  +
+    male +
+    (1 + ch_s | country),
+  data = d1,
+  family = "gaussian",
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m1"
+)
+```
+
+
+
+### model for belief
+
+From causal dag above
+
+```{r}
+m2 <- brm(
+  anx ~
+    bg_s  +
+    age_s  +
+    male +
+    (1 + ch_s | country),
+  data = d1,
+  family = "gaussian",
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m2"
+)
+summary(m2)
+```
+
+
+Graph -- No effect, why? 
+```{r}
+p2 <- brms::conditional_effects(m2,
+                                c("bg_s"),
+                                categorical = F,
+                                #
+                                probs = c(0.11, 0.89))
+plot(p2)
+```
+
+To do -- look at between country effects and relative effects within countries
+
+
+```{r}
+library("rethinking")
+set.seed(867530)
+
+m_ch <- ulam(
+  alist(
+    anx_s ~ normal(mu , sigma),
+    mu <-  alpha + b1 * ch_s + b2 * age_s  + b3 * male + a_country[country] + b_country[country] * ch_s,
+    alpha ~ normal(0,1),
+    b1 ~ dlnorm(0,1),
+    b2 ~ normal(0,1),
+    b3 ~ normal(0,1),
+    u_country ~ dnormal(0,1),
+    c(a, b)[country] ~ multi_normal(c(a, b) , Rho , sigma_country),
+    a ~ normal(0, 2),
+    b ~ normal(-1, 0.5),
+    sigma_country ~ exponential(1),
+    sigma ~ exponential(1),
+    Rho ~ lkj_corr(2),
+  ) ,
+  data = d1 ,
+  chains = 4 ,
+  cores = 4
+)
+```
+
+
+Excerpt From: McElreath, Richard;. “Statistical Rethinking.” Apple Books. 
+```
+
+
+## Belief in God
+
+Lets consider the non-trivial theory that belief in God (bg) affects psychological anxiety (wb) by affording a sense of meaning in life. The causal qualities will be the same as those of the previous model, and so too will the threats to inference.
+
+Writing the dag
+```{r}
+tidy_ggdag2 <- dagify(
+  wb  ~ meaning + ses + male + country  +U2,
+  meaning ~ bg +  male + country, 
+  bg ~ age + male + country + U1,
+  ses ~ country + age + U2,
+  exposure =  "bg",
+  outcome =   "wb") %>%
+  tidy_dagitty() 
+
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) + 
+  theme(legend.position = "bottom") + 
+  theme_dag_blank()
+```
+
+And again we face a collider bias by introducing meaning measure, conditional on assumed causal relationships
+
+```{r}
+ggdag::ggdag_collider(tidy_ggdag2,
+                      from = "church",
+                      to = "wb",
+                      controlling_for(c("male","support","country","age")))
+
+```
+
+### OLD ANALYSIS
+
+
+
+#
+#setwd("/Users/jbul176/The\ Virtues\ Project\ Dropbox/Joseph\ Bulbulia/00Bulbulia\ Pubs/2020/2020_VAN_ELK") # mine
+
+# read data
+e <- read.csv("/DataStudy3_SourceCredibility_Long.csv", header=T) # old data within/group means
+d <- read.csv('DataLong', header=T) # new data without ingroup means
+#d$statementAndOrder # error but this is not needed
+nrow(d)#20390
+hist(e$religiosity) # group standardized data
+hist(d$religiosity) # note difference
+# check data : note that subject needs to be a factor. also, "Statement" needs to be a factor. for gender there are few "others" we create a "male gender variable (below) for simplicity. 
+#
+# look for patters of missingness ####
+library(naniar)
+vis_miss(d) # substantial pattern of missing ness in a few variables, 
+```
+```{r}
+#plot outcomes: gaussian is reasonable, but we'll come back to this after ppchecks
+str(d)
+# check outcomes
+hist(d$credible) # gaussian ordinal
+hist(d$important)# flat
+# what is the F1 variable?
+hist(d$recallFa ) ##??
+hist(d$recallHit )##??
+```
+```{r}
+#make tables ####
+# and look for anomolies
+library(table1) # useful package
+table1::table1(~Age + Gender + Education + R_religiousID + religiosity + culturalNorms|country, data =d, transpose =T)
+```
+```{r}
+table1::table1(~credible|country, data =d, transpose =TRUE)# outcome variables
+```
 
 
 
 ```{r}
-head(df)
-tidy_ggdag <- dagify(
-  rel ~ age + country + male,
-  wb  ~ rel + country,
-  wb ~ soc  + ses,
-  ses ~ country + age, 
-  exposure =  "rel",
-  latent = "country",
-  outcome =   "wb") %>%
-  tidy_dagitty()
-#
-# graph adjustment sets
-ggdag::ggdag_adjustment_set(tidy_ggdag, node_size = 14) +
-  theme(legend.position = "bottom")
-ggdag_dseparated(tidy_ggdag)
-ggdag_collider(tidy_ggdag)
-ggdag_instrumental(tidy_ggdag)å
+table1::table1( ~R_attendance + R_prayer + R_religiousID + R_member  + R_god   + R_afterlife|country, data =d, transpose =T)
+```
+
+```{r}
+# how correlated are the religion variables? ####
+corrmat<-d%>%
+  dplyr::select(
+    R_attendance,
+    R_religiousID,
+    R_member, # can lose this
+    R_god,
+    R_afterlife,
+    R_prayer)%>%
+  dplyr::mutate(R_attendance.S = scale(R_attendance),
+                R_religiousID.S =scale(R_religiousID),
+                R_member.S = scale(R_member), # not used
+                R_god.S=scale(R_god),
+                R_prayer.S =scale(R_prayer),
+                R_afterlife.S =scale(R_afterlife))%>%
+  rowwise() %>% 
+  mutate(REL= mean(c(R_attendance, R_prayer,R_god,R_religiousID,R_afterlife), na.rm=T))%>% # we don't use this, but my sense is R_member isn't going to be worth including.
+  mutate(REL.S = scale(REL))%>% # we don't use this
+  select(R_attendance.S,R_religiousID.S,R_member.S,R_god.S,R_afterlife.S,R_prayer.S) # don't select religiosity for PCA
+# corrplot
+res <- cor(corrmat, method="pearson")
+corrplot::corrplot(res, method= "color", order = "hclust") # tl.pos = 'n'
 ```
 
 
 ```{r}
-head(df)
-tidy_ggdag <- dagify(
-  rel ~ age + country,
-  wb ~ soc  + ses + rel + age,
-  ses ~ country + age, 
-  exposure =  "rel",
-  latent = "country",
-  outcome =   "wb") %>%
-  tidy_dagitty()
-#
-# graph adjustment sets
-ggdag::ggdag_adjustment_set(tidy_ggdag, node_size = 14) +
-  theme(legend.position = "bottom")
-ggdag_dseparated(tidy_ggdag)
-ggdag_collider(tidy_ggdag)
-ggdag_instrumental(tidy_ggdag)å
+## corr.soc  
+sjp.corr(corrmat,
+         title = "Correlation matrix of religion variables",
+         geom.colors = "RdBu")
+```
+```{r}
+# PCA ####
+cpca <- prcomp(corrmat, center=TRUE, scale.=TRUE)
+summary(cpca)
+
+# or this
+pca(corrmat) # God is "good" 
+# get data into shape ####
+# # check the response time log (how I would handle this)
+hist(log(d$RT)) # looks OK
+# create data frame ####
+#  center/standardise for meaningful intercept and for reliable interactions (also for estimation)
+dd<-d%>%
+  dplyr::select(
+    R_attendance,
+    R_religiousID,
+    R_member, # can lose this
+    R_god,
+    R_afterlife,
+    R_prayer,
+    religiosity,
+    credible,source,country,subject,Statement,Gender,Education,SES,culturalNorms,Age,source_first,sourceCorrect,RT,important)%>%
+  dplyr::mutate(subject = factor(subject),
+                Statement = factor(Statement), 
+                Male = factor(ifelse(Gender =="man","male","not_male")),
+                Edu.C = scale(Education,center=T,scale=F),
+                SES.C = scale(SES, center=T,scale=F),
+                culturalNorms.S = scale(culturalNorms,center=T,scale=T),
+                logResp = log(RT),
+                logResp.C = scale(logResp,scale=F,center=TRUE),
+                Age.Decades.C = scale(Age, scale = FALSE, center = TRUE)/10)%>%
+  dplyr::mutate(R_attendance.S = scale(R_attendance),
+                R_religiousID.S =scale(R_religiousID),
+                R_member.S = scale(R_member),
+                R_god.S=scale(R_god),
+                R_prayer.S =scale(R_prayer),
+                R_afterlife.S =scale(R_afterlife),
+                religiosity.S = scale(religiosity))
+
+
+# Get PCA
+dfp<-data.frame(cpca$x[,1:2])
+ddd<-as.data.frame(cbind(dd,dfp)) # data for PCA comparison
+head(ddd) 
+
+```{r}
+# detour ignore#### 
+# table1::table1( ~culturalNorms.S*R_god  |country, data =ddd, transpose =T)
+# ```
+# ```{r}
+# library(sjPlot)
+# ek8<-  plot_xtab(ddd$country,ddd$ R_god, show.n=F,
+#                  show.prc = F , show.total = F,drop.empty = F) +  scale_fill_aaas() +scale_y_continuous(limits=c(0,.30)) + xlab("Country") +  ylab("Frequency God Beliefs") #+
+# #  scale_y_continuous(limits=c()) + #theme(plot.title = element_text(size=09))
+# # theme(axis.text.x = element_text(angle = 0, hjust=1,size =10))
+# 
+# ek8
+# ek9<-  plot_xtab(ddd$country,ddd$culturalNorms, show.n=F,
+#                  show.prc = F, show.total = F,drop.empty = F) +  scale_fill_aaas() +
+#   scale_y_continuous(limits=c(0,.30)) +  xlab("Country") +  ylab("Frequency Cultural Norms Perc. Religiosity")
+# 
+# ek9
+# compare_god_norm<-ggarrange(ek8,ek9,nrow=2) # 3 x 1
+# compare_god_norm
+```
+
+```{r}
+# filthy frequentist model (which we need to check for Variance Inflaction Factors (multicollinearity)) # if our religion variables were not highly correlated we could include all/most of them to understand the dimensionality of religousity on credibility.
+library(lme4)
+# saturated model
+d1<-lmer(credible ~ (R_attendance.S + R_religiousID.S + R_member.S + R_god.S +R_afterlife.S) * source +
+           culturalNorms.S * source +
+           Statement +
+           source_first +
+           sourceCorrect +
+           Age.Decades.C +
+           Edu.C +
+           Male +
+           SES.C +
+           logResp.C+
+           (source|country), data=ddd )  
+
+# our model
+d2<-lmer(credible ~religiosity.S * source +  
+           culturalNorms.S * source +
+           Statement +
+           source_first +
+           sourceCorrect +
+           Age.Decades.C +
+           Edu.C +
+           Male +
+           SES.C +
+           logResp.C+
+           (source|country), data=ddd )  
+
+# not our model which is just as good as the preferred
+# first and second PC, which predicts 80%+ of the variance without multi-collinearity 
+d3<-lmer(credible ~(PC1 + PC2) * source  + 
+           culturalNorms.S * source +
+           Statement +
+           source_first +
+           sourceCorrect +
+           Age.Decades.C  +
+           Edu.C +
+           SES.C +
+           logResp.C+
+           (source|country), data=ddd )
+
+# god is the strongest religiosity term
+d4<-lmer(credible ~ R_god.S * source  + 
+           culturalNorms.S * source +
+           Statement +
+           source_first +
+           sourceCorrect +
+           Age.Decades.C +
+           Edu.C +
+           Male +
+           SES.C +
+           logResp.C+
+           (source|country), data=ddd )
+
+# simple PC1 model (probably what JB would have done)
+d5<-lmer(credible ~PC1 * source + 
+           culturalNorms.S * source +
+           Statement +
+           source_first +
+           sourceCorrect +
+           Age.Decades.C +
+           Edu.C +
+           Male +
+           SES.C +
+           logResp.C+
+           (source|country), data=ddd )
+# check for multi-colinearity ####
+library(car) 
+vif(d1)# very high, will increase standard errors of regression coeffs. 
+
+vif(d2)# OK  our model
+
+vif(d5)# OK my preferred model
+
+library(sjPlot)
+plot_model(d2) # our model (without co-variates)
+plot_model(d2, type= "re") # our model (without co-variates)
+# fem<-plot_model(d2) # our model (without co-variates)
+# plot_model(d2) # our model (without co-variates)
+# ref<-plot_model(d2, type= "re") # our model (without co-variates)
+# plot_model(d3) # same inference
+# plot_model(d4) # same inference
+# plot_model(d5) # same inference
+# ref<-plot_model(d2, type="re")
+# lmer_coefplot<-ggarrange(fem,ref,ncol=1)
+# lmer_coefplot
+```
+
+
+
+```{r}
+plot_model(d5) # no diff
+plot_model(d5, type="re") # no diff
+```
+
+```{r}
+# Run this chunk only to satisfy yourself that our religiosity variable is good.
+pl2<-ggpredict(d2, c(terms ="religiosity.S[all]","source"), ci.lvl = 0.95)
+
+pp2<-plot(pl2)+scale_y_continuous(limits=c(1,7)) + xlab("Religiosity (standardised)") + ylab("Credible:1-7")
+
+# pl4<-ggpredict(d4, c(terms ="R_god.S[all]","source"), ci.lvl = 0.95)
+# pp4<-plot(pl4)+scale_y_continuous(limits=c(1,7))+ xlab("Belief in God (standardised)") + ylab("Credible:1-7")
+# 
+# pl5<-ggpredict(d5, c(terms ="PC1[all]","source"), ci.lvl = 0.95)
+# pp5<-plot(pl5)+scale_y_continuous(limits=c(1,7)) + xlab("First Principle Component: Religion Indicators") + ylab("Credible:1-7")
+# 
+# 
+# pl2.1<-ggpredict(d2, c(terms ="culturalNorms.S[all]","source"), ci.lvl = 0.95)
+# 
+# pp2.1<-plot(pl2.1)+scale_y_continuous(limits=c(1,7)) + xlab("Religiosity (standardised), Religiosity Model") + ylab("Credible:1-7")
+# 
+# pl5.1<-ggpredict(d5, c(terms ="culturalNorms.S[all]","source"), ci.lvl = 0.95)
+# pp5.1<-plot(pl5.1)+scale_y_continuous(limits=c(1,7)) + xlab("Cultural Norms (Standardised), PC1 model") + ylab("Credible:1-7")
+# # create plot of the different ways of handling religiosity 
+# lmerplot<-ggarrange(pp2,pp5,pp2.1,pp5.1,labels=c("a","b","c","d"),common.legend = T)
+# lmerplot # 1000 x 1000
+# create plot of our preferred model for the 2 outcomes of interest
+# lmerquick<-ggarrange(ggarrange(lmer_coefplot),ggarrange(pp2,pp2.1,ncol=2),heights=c(2,1),nrow=2)
+# lmerquick # 2000 x 2
+```
+
+```{r}
+#table of our pref model
+library(sjPlot)
+tab_model(d2) # see documentation for options
+```
+
+# bayesian model ####  I'm not running this again, but you can add this to the next chunk and run
+m1 <- brm(credible ~ religiosity.S * source +
+            culturalNorms.S * source +
+            Statement +
+            source_first +
+            sourceCorrect +
+            Age.Decades.C +
+            Edu.C +
+            Male +
+            SES.C +
+            logResp.C+
+            (1+source|country),
+          data=ddd,
+          family = "gaussian",
+          seed=1234,
+          warmup=1500,
+          iter=6500,
+          chains=4)
+
+saveRDS(m1, "m1")
+
+```{r}
+m1<-readRDS("m1") # to avoid running this again in knitr, probably a better way
+#summary(m1) # raw summary
+# compare freq estimates with mcmc
+# tab_model(d2,m1)
+```
+
+```{r}
+# diagnositics
+mcmc_plot(m1,
+          type = "trace")
+# mcmc_plot(m1,
+#           type = "areas")
+# mcmc_plot(m1,
+#           type = "violin")
+# mcmc_plot(m1,
+#           type = "intervals")
+
+# we see the oridinal qualities of our dataset here
+ppg<-pp_check(m1)
+ppg
+```
+
+```{r}
+# for math
+#stancode(m1)
+```
+```{r}
+# stanplot(m1, pars = NA,
+#          type = "intervals",
+#          fixed = FALSE,
+#          prob_outer = 0.95,
+#          exact_match = FALSE)
+```
+```{r}
+#better plot
+# m1fe<-plot_model(m1, title= "Credibility Coefficient Plot")
+# m1fe #1 x 1
+# 
+# m1re<-plot_model(m1, type ="re", sort.est = TRUE)
+# m1re
+# even better plot
+library(see)
+library(parameters)
+par<-parameters::model_parameters(m1,effects = "all", component = "all", test = c("pd"))
+par
+par2<-parameters::model_parameters(m1)
+#param_plot<- plot(par,  sort = TRUE) +theme_lucid() #option
+#param_plot<- plot(par,  sort = TRUE) +theme_abyss() #option
+#param_plot<- plot(par,  sort = TRUE) +theme_radar()#option
+param_plot<- plot(par,  sort = TRUE) +theme_radar()
+#param_plot<- plot(par,  sort = TRUE) +theme_modern()#option
+#param_plot<- plot(par,  sort = TRUE) +theme_blackboard()#option
+param_plot # my pref.
+```
+
+```{r}
+# not used
+# statcon<-make_conditions(dd, vars = c("REL"))
+# statcon
+# str(statcon)
+# cn = data.frame("REL" = c(1,.5,0), "cond__" = c("REL = 1","REL = .5", "REL = 0"))
+
+# Run these lines, I'm just commenting out for the document
+p1<-brms::conditional_effects(m1, c("religiosity.S:source"),
+                               spaghetti = T,
+                              nsamples = 100,
+                              probs = c(0.11, 0.89))
+pp1<-plot(p1, plot = FALSE)[[1]] + scale_y_continuous(limits = c(1,7))  + xlab("Religiosity (standarised)") + ylab("Credibility: 1-7") + ggtitle("Expected Crediblity by Religiosity")  + theme_clean() #theme_radar_dark() + scale_fill_npg()
+pp1 #
+p2<-brms::conditional_effects(m1, c("culturalNorms.S:source"),
+                               spaghetti = T,
+                              nsamples = 100,
+                              probs = c(0.11, 0.89))
+pp2<-plot(p2, plot = FALSE)[[1]] + scale_y_continuous(limits = c(1,7))  + xlab("Cultural Norms of religiosity (standarised)") + ylab("Credibility: 1-7") + ggtitle("Expected Crediblity by Cultural Norms") + theme_clean() #+ theme_radar_dark() + scale_fill_npg()
+pp2 #
+library(ggpubr)
+plotgood<-ggarrange(pp1, pp2, nrow=1, common.legend = T)
+#saveRDS(plotgood,"plotgood")
+#plotgood<-readRDS("plotgood")
+plotgood
+```
+   
+# NOTE: an ordinal model would be better, but will require time to run, and it might muddy our inference.
+# 
+m1o <- brm(credible ~ religiosity.S * source +
+             culturalNorms.S * source +
+             Statement +
+             source_first +
+             sourceCorrect +
+             Age.Decades.C +
+             Edu.C +
+             Male +
+             SES.C +
+             logResp.C+
+             (1+source|country),
+           data=ddd,
+           inits = 0,
+           family = cumulative(link ="logit"),
+           seed=1234,
+           warmup=1000,
+           iter=3000,
+           chains=4)
+
+saveRDS(m1o,"m1o")
+
+# table and plots
+```{r} 
+
+m1o<-readRDS("m1o")
+ppo<-pp_check(m1o)  ## fit is much better
+ppo
+ordinalmod<-parameters::model_parameters(m1o,effects = "all", component = "all", test = c("pd"))
+ordinalmod
+oplot<-plot(ordinalmod,  sort = TRUE) + theme_radar()
+oplot
+compareordplot<-ggarrange(ggarrange(param_plot,oplot,labels=c("a","b")),ggarrange(ppg, ppo, labels=c("c","d")), nrow=2, heights = c(3,1))
+compareordplot
+```
+## next model
+## have not inclueded this in the knitr call to save time. 
+```{r}
+statcon<-make_conditions(ddd, vars = c("source"))
+statcon
+str(statcon)
+
+p1<-brms::conditional_effects(m1o, c("religiosity.S"),
+                              categorical =T, # 
+                              probs = c(0.11, 0.89),
+                              conditions = statcon)
+pp1<-plot(p1, plot = FALSE)[[1]]   + xlab("Religiosity (standarised)") + ylab("Credibility: 1-7") + ggtitle("Expected Crediblity by Religiosity")  + scale_y_continuous(limits = c(0,.4))  + theme_clean() + scale_color_grey() +scale_fill_grey() # note of you set categorical to true, then scale the y axis limits: c(0,1). Same for the plot below
+pp1 #
+p2<-brms::conditional_effects(m1o, c("culturalNorms.S"),
+                               categorical =T,
+                              probs = c(0.11, 0.89),
+                              conditions = statcon)
+pp2<-plot(p2, plot = FALSE)[[1]] + scale_y_continuous(limits = c(0,.4))  + xlab("Cultural Norms of Religiosity (standarised)") + ylab("Credibility: 1-7") + ggtitle("Expected Crediblity by Cultural Norms")  + theme_clean() + scale_color_grey() +scale_fill_grey() 
+pp2 #
+library(ggpubr)
+plotgood2.0<-ggarrange(pp1, pp2, labels=c("a","b"), nrow=1, common.legend = T)
+plotgood2.0
+saveRDS(plotgood2.0,"plotgood2.0")
+```
+
+
+```{r}
+# plot that can be read
+## We can set categorical to false to get more interpretable figures
+p1<-brms::conditional_effects(m1o, c("religiosity.S:source"),
+                              categorical =F, # note set to true to get all the ordinal values
+                              probs = c(0.11, 0.89),
+                                spaghetti = T,
+                              nsamples = 100) # play with this number
+pp1<-plot(p1, plot = FALSE)[[1]]   + xlab("Religiosity (standarised)") + ylab("Credibility: 1-7") + ggtitle("Expected Crediblity by Religiosity")  + scale_y_continuous(limits = c(1,7))  + theme_clean() # note of you set categorical to true, then scale the y axis limits: c(0,1). Same for the plot below
+pp1 #
+p2<-brms::conditional_effects(m1o, c("culturalNorms.S:source"),
+                               categorical =F,
+                              probs = c(0.11, 0.89),
+                                spaghetti = T,
+                              nsamples = 100) # play with this number
+pp2<-plot(p2, plot = FALSE)[[1]] + scale_y_continuous(limits = c(1,7))  + xlab("Cultural Norms of Religiosity (standarised)") + ylab("Credibility: 1-7") + ggtitle("Expected Crediblity by Cultural Norms")  + theme_clean() 
+pp2 #
+library(ggpubr)
+plotgood2<-ggarrange(pp1, pp2, labels=c("c","d"), nrow=1, common.legend = T)
+plotgood2
+saveRDS(plotgood2,"plotgood2")
+```
+
+```{r}
+# for omni graph
+plotgoodO<-ggarrange(pp1, pp2, nrow=1, common.legend = T)
+plotgoodO
+```
+
+```{r}
+#plotgood2<-readRDS("plotgood2")
+#plotgood2
+# compare ordinal plots
+twotypeordinalplot<-ggarrange(plotgood2.0,plotgood2,nrow=2)
+twotypeordinalplot
+```
+```{r}
+# everything plot
+omniplot<-ggarrange(ggarrange(param_plot,oplot,labels=c("a","b")),ggarrange(ppg, ppo, labels=c("c","d")), ggarrange(plotgood, plotgoodO, labels=c("e","f")), nrow=3, heights = c(3,1,1))
+omniplot
+```
+
+
+
+
+# 
+# 
+# ###### IF WE WANTED BOTH INDICATORS IN THE MODEL THIS IS THE CODe
+# m2 <- brm(mvbind(credible, important) ~ 
+#             religiosity.S * source + 
+#             culturalNorms.S * source +
+#             Statement +
+#             source_first +
+#             sourceCorrect +
+#             Age.Decades.C +
+#             Edu.C +
+#             Male +
+#             SES.C +
+#             logResp.C+
+#             (1+source|country),
+#           data=ddd,
+#           family = "gaussian",
+#           seed=1234,
+#           warmup=1000,
+#           iter=3000,
+#           chains=4)
+
 ```

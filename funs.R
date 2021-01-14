@@ -5,6 +5,12 @@ data_read_mymachine <- function() {
     read.csv("/Users/jbul176/Documents/GitHub/many_analysts/MARP_data_blinded.csv")
 }
 
+
+# data_read_mymachine_full <- function() {
+#   out <-
+#     read.csv("DataStudy3_SourceCredibility_Long.csv")
+# }
+
 get_rel_vars <- function(x) {
   df <- x %>% dplyr::select(c(starts_with("rel_"), "country"))
 }

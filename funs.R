@@ -16,7 +16,7 @@ get_rel_vars <- function(x) {
 }
 
 get_wb_gen <- function(x) {
-  df <- x %>% dplyr::select(c(starts_with("wb_gen"), "country"))
+  df <- x %>% dplyr::select(c(starts_with("wb_gen"), "country")) 
 }
 
 get_wb_phys <- function(x) {
@@ -24,7 +24,8 @@ get_wb_phys <- function(x) {
 }
 
 get_wb_psych <- function(x) {
-  df <- x %>% dplyr::select(c(starts_with("wb_psych"), "country"))
+  df <- x %>% dplyr::select(c(starts_with("wb_psych"), "country"))%>%
+    dplyr::select(-wb_psych_mean)
 }
 
 

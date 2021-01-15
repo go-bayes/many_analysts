@@ -57,15 +57,16 @@ table(d$rel_3,useNA = "ifany") # This is absolutely not good.
 ```
 
 Note: here, not all NAs are created alike. 
+
 ```{r}
 #  need to recode factors -- NAs should be NAs, otherwise, we should describe the missingness
 table(d$ethnicity,  useNA = "ifany") # need recode NA as "not identified" 
 table(d$denomination,useNA = "ifany") # need recode NA as "no denomination" 
-df$wb_socSATSEX
+
 # fix
 d$denomination[is.na(d$denomination)] <- "not_reported"
 d$ethnicity[is.na(d$ethnicity)] <- "not_reported"
-d$wb_soc_3[is.na(d$wb_soc_3)] <- "not_reported" # Sat with sex
+#d$wb_soc_3[is.na(d$wb_soc_3)] <- "not_reported" # Sat with sex
 ```
 
 
@@ -117,8 +118,8 @@ rename(
     wb_psychSATSELF  = wb_psych_5,
     wb_psychANXIETY  = wb_psych_6,
     wb_socSATPERSONALRELATIONSHIPS  = wb_soc_1,
-    wb_socSATSUPPORTFRIENDS  = wb_soc_2,
-    wb_socSATSEX   = wb_soc_3,
+    wb_socSATSUPPORTFRIENDS  = wb_soc_2
+ #   wb_socSATSEX   = wb_soc_3,
   )%>%
   dplyr::mutate(IS_RELIIGOUS = as.factor(IS_RELIIGOUS),
                 denomination = as.factor(denomination),
@@ -484,9 +485,11 @@ m1 <- brm(
   chains = 4,
   file = "m1"
 )
+parameters::model_parameters(m1)
+parameters::random_parameters(m1)
 ```
 
-very small effect
+No reliable effect
 
 ```{r}
 plot(ggeffects::ggpredict(m1, terms = c("ch_s[minmax]"),type = "fe", ci.lvl = 0.89))  +
@@ -499,13 +502,52 @@ Countries
 
 
 ```{r}
-plot(ggeffects::ggpredict(m1, terms = c("country[all]", "ch_s[minmax]"),type = "re", ci.lvl = 0.89))  +
+plot(ggeffects::ggpredict(m1, terms = c("country[all]", "ch_s[minmax]"),type = "re", ci.lvl = 0.89))  +  scale_fill_brewer(palette= "Set2") + labs( title = "Predicted effects of church on anxiety")
+```
+
+
+But recall big differences within and between counties in Church Attendence
+
+```{r}
+r1 <- rel %>%
+  ggplot(aes(
+    x = country,
+    y = rel_CHURCHFREQ,
+    group = country,
+    color = country
+  )) +
+  geom_boxplot(notch = TRUE) +
+  geom_point(position = "jitter", alpha = .1) +
+  scale_color_viridis(discrete = TRUE) +
+  ggtitle("Church Frequency") +
+  ylab("") + 
+  theme(axis.text.x = element_text(angle = 30))
+r1
+```
+
+
+We can use the within and between centred indicators for attendence to clarify how such heterogeneity affects inferenence.
+
+- within_church centering = relative church atttendance within a country
+
+- between_church centering = the adjustment for country level differences in churhc attendance
+
+## Within and between
+
+
+
+```{r}
+plot(ggeffects::ggpredict(m1a, terms = c("ch_within[minmax]"),type = "re", ci.lvl = 0.89))  +
    scale_fill_brewer(palette= "Set2") + labs(
     title = "Predicted effects of church on anxiety")
 ```
 
-
-## Within and between
+And we do not find reliable heterogeneity at the country level.
+```{r}
+plot(ggeffects::ggpredict(m1a, terms = c("country[all]", "ch_within[minmax]"),type = "re", ci.lvl = 0.89))  +
+   scale_fill_brewer(palette= "Set2") + labs(
+    title = "Predicted effects of church on anxiety")
+```
 
 
 
@@ -520,11 +562,13 @@ m1_a <- brm(
   iter = 3000,
   chains = 4,
   file = "m1_a.rds")
-summary(m1_a)
 
+parameters::model_parameters(m1_a)
+parameters::random_parameters(m1_a)
 
 ```
 
+Within countries we do not find  effects from different levels of church attendance on anxiety
 
 ```{r}
 plot(ggeffects::ggpredict(m1_a, terms = c("ch_within[minmax]"),type = "re", ci.lvl = 0.89))  +
@@ -532,12 +576,22 @@ plot(ggeffects::ggpredict(m1_a, terms = c("ch_within[minmax]"),type = "re", ci.l
     title = "Predicted effects of church on anxiety")
 ```
 
+And we do not find reliable heterogeneity at the country level.
 ```{r}
-plot(ggeffects::ggpredict(m1_a, terms = c("ch_between[minmax]"),type = "re", ci.lvl = 0.89))  +
+plot(ggeffects::ggpredict(m1_a, terms = c("country[all]", "ch_within[minmax]"),type = "re", ci.lvl = 0.89))  +
    scale_fill_brewer(palette= "Set2") + labs(
     title = "Predicted effects of church on anxiety")
 ```
 
+Countries who differ in their average levels of church attendence differ present differences in their expected anxiety levels. Those with more attendence are expected to present less anxiety.
+```{r}
+plot(ggeffects::ggpredict(m1_a, terms = c("ch_between[minmax]"),type = "re", ci.lvl = 0.89))  +
+   scale_fill_brewer(palette= "Set2") + labs(
+    title = "Predicted effects of church on anxiety")
+
+```
+
+And we do find thi separation at the country level. 
 ```{r}
 plot(ggeffects::ggpredict(m1_a, terms = c("country[all]", "ch_between[minmax]"),type = "re", ci.lvl = 0.89))  +
    scale_fill_brewer(palette= "Set2") + labs(
@@ -546,15 +600,24 @@ plot(ggeffects::ggpredict(m1_a, terms = c("country[all]", "ch_between[minmax]"),
 
 
 
+Countries who differ in their average levels of church attendence differ present differences in their expected anxiety levels. Those countries greater levels of church attendance may be expected to present less anxiety.
 
 
+Take homes:
 
+- No evidence for a "relative" church attendence effect. 
+- Evidence for a between country effect, however this  is *only* intereting if you are a sociologist
+- Sociological data, averaged at the country level, is unhelpful for psychological inference at the individual level. This point is relevant to big historical database projects that are collecting country and culture level data. Although it may be interesting to have sociological interests -- e.g. in whether countries where people go to church more often have lower levels of anxiety, we must not confuse this question with an individual level question about the psychological effects of church attendance. 
+- A key point to keep in mind: the reasons people go to churh might differ. For example church attendance might reduce anxiety and for this reason people attend.  Without understanding the demand characteristics for church attendance we are likely to get the wrong inference. Consider an analogy. Imagine we modelled the relationship between taking antiobotics and infection. Without knowning why people were taking antiobiotics we might be tempted into inferring inferring from cross sectional data that antiobotics *cause* infection.  For this reason, it is very important to collect longitudional data on people, and to focus on whether there are demand qualities that lead people to attend church. 
+
+Next we turn to the belief in God model. 
 
 ## Belief in God
 
 Lets consider the non-trivial theory that belief in God (bg) affects psychological anxiety (wb) by affording a sense of meaning in life. The causal qualities will be the same as those of the previous model, and so too will the threats to inference.
 
-Writing the dag
+We begin by drawing the dag:
+
 ```{r}
 tidy_ggdag2 <- dagify(
   wb  ~ meaning + ses + male + country  +U2,
@@ -569,6 +632,7 @@ tidy_ggdag2 <- dagify(
 ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) + 
   theme(legend.position = "bottom") + 
   theme_dag_blank()
+
 ```
 
 And again we face a collider bias by introducing meaning measure, conditional on assumed causal relationships
@@ -578,7 +642,8 @@ ggdag::ggdag_collider(tidy_ggdag2,
                       from = "church",
                       to = "wb",
                       controlling_for(c("male","support","country","age")))
-
+parameters::model_parameters(m2)
+parameters::random_parameters(m2)
 ```
 
 ### model for belief
@@ -601,7 +666,9 @@ m2 <- brm(
   chains = 4,
   file = "m2"
 )
-summary(m2)
+parameters::model_parameters(m2)
+parameters::random_parameters(m2)
+
 ```
 
 
@@ -631,7 +698,7 @@ plot(ggeffects::ggpredict(m2, terms = c("country[all]", "bs_s[minmax]"),type = "
 
 ```{r}
 m2_a <- brm(
-  anx_s ~ age_s  + male + ch_within +  bg_between + (1 + bg_within|country + bg_between | country),  
+  anx_s ~ age_s  + male +  bg_between + (1 + bg_within|country + bg_between | country),  
   data = d1,
   family = "gaussian",
   seed = 1234,
@@ -640,6 +707,8 @@ m2_a <- brm(
   chains = 4,
   file = "m2_a.rds")
 summary(m2_a)
+model_parameters(m2_a)
+random_parameters(m2_a)
 ```
 
 

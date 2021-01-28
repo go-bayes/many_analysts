@@ -128,6 +128,7 @@ Next we need to examine patterns of missingness, which might spoil inference.
 ```{r cache = TRUE}
 library("naniar")
 vis_miss(df) # substantial pattern of missing ness in a few variables, 
+gg_miss_upset(df)
 ```
 
 There is little missingness so we will use only complete cases. Note that it would be better to have a method for handling the uncertainty of missingness. Missing data should be handled by some probabilistic imputation strategy. However, because there are many larger problems about measurement error, sampling, and theory, lets set these to questions to the side and work with the complete dataset
@@ -368,7 +369,7 @@ We have two sets adjustments sets to chose from. We will pick the set with the m
 
 ```{r}
 tidy_ggdag <- dagify(
-  wb  ~ rel + ses + male + country + U2,
+  wb  ~ rel + ses + male + country +  U2,
   rel ~ age + male + country + U1,
   ses ~ country + age + U2,
   exposure =  "rel",
@@ -411,12 +412,12 @@ This is a new model so we need to write our dag all over again. The dag will res
 
 We write the dag:
 
-### Dag shoes two adjustment sets
+### Dag shoes two adjustment sets both of which contain denomination
 ```{r}
 tidy_ggdag2 <- dagify(
   wb  ~ support + ses + male + country + U2,
-  support ~ church + male + country,
-  church ~ age + male + country + U1,
+  support ~ church + male + country + den,
+  church ~ age + male + country + den + U1,
   ses ~ country + age + U2,
   exposure =  "church",
   outcome =   "wb"
@@ -467,7 +468,7 @@ Wrangle data
 # get data into shape
 d1 <- df %>%
   dplyr::filter(
-    !is.na(wb_psychANXIETY),!is.na(age),!is.na(rel_CHURCHFREQ),!is.na(wb_psychMEANING),!is.na(male),!is.na(rel_EXTENTBELIEVEGOD)
+    !is.na(wb_psychANXIETY),!is.na(age),!is.na(rel_CHURCHFREQ),!is.na(wb_psychMEANING),!is.na(male),!is.na(rel_EXTENTBELIEVEGOD),
   ) %>%
   dplyr::mutate(
     anx = as.numeric(wb_psychANXIETY),

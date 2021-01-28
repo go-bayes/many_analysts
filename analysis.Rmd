@@ -444,6 +444,10 @@ ggdag::ggdag_collider(tidy_ggdag2,
 
 ```
 
+
+
+
+
 Let this serve as a warning for us to think about our causation. We must develop our causal model before we leap into our statistical model.
 
 ## The statistical model
@@ -477,7 +481,7 @@ d1 <- df %>%
     mn_s = scale(wb_psychMEANING),
     bg_s = scale(rel_EXTENTBELIEVEGOD)
   ) %>%
-  dplyr::select(anx, ch, mn, bg, anx_s, age_s, ch_s, mn_s, male2, country, male, bg_s)
+  dplyr::select(anx, ch, mn, bg, anx_s, age_s, ch_s, mn_s, male2, country, male, bg_s,wb_psychANXIETY)
 
 ## degroup variables for within and between analysis
 ## https://cran.r-project.org/web/packages/parameters/vignettes/demean.html
@@ -594,13 +598,13 @@ m1_prior <- brm(
 ```
 
 
-```{r}
+```{r eval= FALSE}
 prior_summary(m1)
 ```
 
 A key problem is the use of uninformative priors
 
-```{r}
+```{r eval = FALSE}
 bayestestR::describe_prior(m1)
 ```
 
@@ -676,7 +680,7 @@ https://easystats.github.io/parameters/reference/demean.html
 
 
 The model.
-
+wb_psychANXIETY
 ```{r}
 m1a <- brm(
   anx_s ~ age_s  + male + ch_within +  ch_between + (1 + ch_within|country),  
@@ -693,6 +697,7 @@ parameters::model_parameters(m1a,
 parameters::random_parameters(m1a)
 
 ```
+
 
 We find no relation of "ch_within" to anxiety. 
 
@@ -751,6 +756,206 @@ mcmc_plot(m1a,
 ```
 
 
+
+## TRY ORDINAL MODEL (note church attend should be monotonic -- at next iteration)
+
+```{r}
+m1o <- brm(
+  wb_psychANXIETY ~ ch_s +
+    age_s  +
+    male +
+    (1 + ch_s | country),
+  data = d1,
+  family = cumulative(link ="logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m1o"
+)
+parameters::model_parameters(m1o, test = "p_direction")
+parameters::random_parameters(m1o)
+```
+
+
+
+This resolves the problem
+```{r}
+# YES
+pp_check(m1o)
+```
+
+Trace plots:
+
+```{r, cache = TRUE}
+mcmc_plot(m1o,
+          type = "trace")
+```
+
+Model summary
+```{r}
+parameters::model_parameters(m1o)
+```
+
+
+Plot model
+```{r, cache = TRUE}
+library(viridis)
+p0b<-brms::conditional_effects(m1o, "ch_s", 
+                              spaghetti = T,
+                              nsamples = 200,
+                              categorical = T,
+                              prob = .89,
+                              method = 'fitted')
+
+
+plot(p0b, plot = FALSE)[[1]]   + xlab("ch_s") + ylab ("anxiety 1-5") +
+  labs(title = "Predicted effects of ch_s")# + scale_y_continuous(limits= c(1,5))# +  scale_color_viridis(discrete=TRUE) 
+
+```
+
+
+<!-- Another plot method -->
+
+<!-- ```{r, cache = TRUE} -->
+<!-- library(viridis) -->
+<!-- p0b1<-brms::conditional_effects(m1o, "ch_s",  -->
+<!--                               spaghetti = T, -->
+<!--                               nsamples = 200, -->
+<!--                              categorical = F, -->
+<!--                               prob = .89, -->
+<!--                               method = 'fitted') -->
+
+
+<!-- plot(p0b1, plot = FALSE)[[1]]   + xlab("ch_s") + ylab ("anxiety 1-5") + -->
+<!--   labs(title = "Predicted effects of ch_s")+ scale_y_continuous(limits= c(1,5))# +  scale_color_viridis(discrete=TRUE)  -->
+
+<!-- ``` -->
+
+
+
+### without demeaning
+
+
+```{r}
+m1_o <- brm(
+  wb_psychANXIETY ~ age_s  + male + ch_within +  ch_between + (1 + ch_within|country),  
+  data = d1,
+  family = cumulative(link ="logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m1a_o")
+```
+
+
+
+### Within /between demeaning
+
+```{r}
+m1a_o <- brm(
+  wb_psychANXIETY ~ age_s  + male + ch_within +  ch_between + (1 + ch_within|country),  
+  data = d1,
+  family = cumulative(link ="logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m1a_o")
+```
+
+This resolves the problem
+```{r}
+# YES
+pp_check(m1a_o)
+```
+
+Trace plots:
+
+```{r, cache = TRUE}
+mcmc_plot(m1a_o,
+          type = "trace")
+```
+
+Model summary
+```{r}
+parameters::model_parameters(m1a_o)
+```
+
+
+Within: NOTHING
+```{r, cache = TRUE}
+library(viridis)
+pch_w<-brms::conditional_effects(m1a_o, "ch_within", 
+                              spaghetti = T,
+                              nsamples = 200,
+                              categorical = TRUE,
+                              prob = .89,
+                              method = 'fitted')
+
+
+ppch_w<-plot(pch_w, plot = FALSE)[[1]]    + ylab ("anxiety in sd units") +
+  labs(title = "Predicted effects of Church_within") # +  scale_color_viridis(discrete=TRUE) 
+ppch_w
+
+```
+
+BETWEEN: Yes, and at the highest levels of anxiety. 
+
+```{r cache = TRUE}
+
+pch_b<-brms::conditional_effects(m1a_o, "ch_between", 
+                              spaghetti = T,
+                              nsamples = 200,
+                              prob = .89,
+                              categorical = TRUE,
+                              method = 'fitted')
+
+
+ppch_b<- plot(p, plot = FALSE)[[1]]   + xlab("ch_between") + ylab ("anxiety: 1-5") + 
+  labs(title = "Predicted effects of Church_between")
+ppch_b
+```
+
+<!-- ### Different plot method -->
+
+
+
+<!-- Summing over the categories: -->
+
+
+<!-- ```{r, cache = TRUE} -->
+<!-- library(viridis) -->
+<!-- p0a<-brms::conditional_effects(m1a_o, "ch_within",  -->
+<!--                               spaghetti = T, -->
+<!--                               nsamples = 200, -->
+<!--                              # categorical = TRUE, -->
+<!--                               prob = .89, -->
+<!--                               method = 'fitted') -->
+
+
+<!-- plot(p0a, plot = FALSE)[[1]]   + xlab("bg_within") + ylab ("anxiety in sd units") + -->
+<!--   labs(title = "Predicted effects of bg_within")  + scale_y_continuous(limits = c(1,5))# +  scale_color_viridis(discrete=TRUE)  -->
+<!-- ``` -->
+
+
+<!-- ```{r cache = TRUE} -->
+
+<!-- ps<-brms::conditional_effects(m1a_o, "ch_between",  -->
+<!--                               spaghetti = T, -->
+<!--                               nsamples = 200, -->
+<!--                               prob = .89, -->
+<!--                              # categorical = TRUE, -->
+<!--                               method = 'fitted') -->
+
+
+<!-- plot(ps, plot = FALSE)[[1]]   + xlab("bg_between") + ylab ("anxiety: 1-5") +  -->
+<!--   labs(title = "Predicted effects of bg_between") + scale_y_continuous(limits = c(1,5)) -->
+
+<!-- ``` -->
+
+## Summary of Church attendence Model
 Which we interpret as follows:
 
   - Countries have different levels of anxiety;
@@ -775,14 +980,7 @@ plot(par,  sort = TRUE) +theme_lucid() #option -->
 Next the predictive plots...
 
 ```{r cache = TRUE}
-plot(ggeffects::ggpredict(
-  m1a,
-  terms = c("country[all]", "ch_within[minmax]"),
-  type = "re",
-  ci.lvl = 0.89))  +
-  scale_fill_brewer(palette = "Set2") + 
-  labs(title = "Predicted effects of church on anxiety: countries X within") + 
-  scale_y_continuous(limits = c(-1,1))
+ppch_w
 ```
 
 Countries who differ in their average levels of church attendance differ present differences in their expected anxiety levels. Those with more attendance are expected to present less anxiety.
@@ -791,12 +989,7 @@ And here we pick up the country level trend, which is really strong.  Countries 
 
 
 ```{r cache = TRUE}
-plot(ggeffects::ggpredict(
-  m1a,
-  terms = c("ch_between[minmax]"),
-  type = "re",
-  ci.lvl = 0.89))  +
-  scale_fill_brewer(palette = "Set2") + labs(title = "Predicted effects of church on anxiety: between")  + scale_y_continuous(limits = c(-1, 1))
+ppch_b
 ```
 
 
@@ -818,18 +1011,41 @@ We begin by drawing the dag.
 
 ```{r}
 tidy_ggdag2 <- dagify(
-  wb  ~ meaning + ses + male + country  +U2,
-  meaning ~ bg +  male + country, 
+  wb  ~ meaning + ses + male + country  + U2,
+  meaning ~ bg +  male + country,
   bg ~ age + male + country + U1,
   ses ~ country + age + U2,
   exposure =  "bg",
-  outcome =   "wb") %>%
-  tidy_dagitty() 
+  outcome =   "wb"
+) %>%
+  tidy_dagitty()
 
 # graph adjustment sets
-ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) + 
-  theme(legend.position = "bottom") + 
+ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) +
+  theme(legend.position = "bottom") +
   theme_dag_blank()
+
+
+tidy_ggdag2 <- dagify(
+  wb  ~ meaning + ses + male + country  + U2,
+  meaning ~ bg +  male + country,
+  bg ~ age + male + country + U1,
+  ses ~ country + age + U2,
+  exposure =  "bg",
+  outcome =   "wb"
+) %>%
+  tidy_dagitty()
+
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) +
+  theme(legend.position = "bottom") +
+  theme_dag_blank()
+
+
+```
+
+
+```{r}
 
 ```
 
@@ -871,16 +1087,20 @@ parameters::random_parameters(m2)
 We find no effect for belief in God.
 
 
+
 ```{r cache = TRUE}
 
-p<-brms::conditional_effects(m2, "bg_s", 
-                              spaghetti = T,
-                              nsamples = 300,
-                              prob = .89,
-                              method = 'fitted')
+p <- brms::conditional_effects(
+  m2,
+  "bg_s",
+  spaghetti = T,
+  nsamples = 300,
+  prob = .89,
+  method = 'fitted'
+)
 
 
-plot(p, plot = FALSE)[[1]] + scale_y_continuous(limits = c(-1,1))  + xlab("bg_s") + ylab ("anxiety in sd units") + 
+plot(p, plot = FALSE)[[1]] + scale_y_continuous(limits = c(-1, 1))  + xlab("bg_s") + ylab ("anxiety in sd units") +
   labs(title = "Predicted effects of bg_s")
 
 ```
@@ -934,26 +1154,33 @@ Here's the absence of any individual level effect for belief in God on anxiety.
 
 
 ```{r cache = TRUE}
+p <- brms::conditional_effects(
+  m2,
+  "bg_s",
+  spaghetti = T,
+  nsamples = 300,
+  prob = .89,
+  method = 'fitted'
+)
 
-p<-brms::conditional_effects(m2, "bg_s", 
-                              spaghetti = T,
-                              nsamples = 300,
-                              prob = .89,
-                              method = 'fitted')
 
-
-plot(p, plot = FALSE)[[1]] + scale_y_continuous(limits = c(-1,1))  + xlab("bg_s") + ylab ("anxiety in sd units") + 
+plot(p, plot = FALSE)[[1]] + scale_y_continuous(limits = c(-1, 1))  + xlab("bg_s") + ylab ("anxiety in sd units") +
   labs(title = "Predicted effects of bg_s")
 
 ```
 
+
 There country-level variability is all in anxiety, but not in the effect of belief in God.
 
 ```{r cache = TRUE}
-plot(ggeffects::ggpredict(m2, terms = c("country[all]", "bs_s[minmax]"),type = "re", ci.lvl = 0.89))  +
-   scale_fill_brewer(palette= "Set2") + labs(
-    title = "Predicted effects of bs_s on anxiety") + 
-  scale_y_continuous(limits = c(-1,1))
+plot(ggeffects::ggpredict(
+  m2,
+  terms = c("country[all]", "bs_s[minmax]"),
+  type = "re",
+  ci.lvl = 0.89
+))  +
+  scale_fill_brewer(palette = "Set2") + labs(title = "Predicted effects of bs_s on anxiety") +
+  scale_y_continuous(limits = c(-1, 1))
 ```
 
 Next we turn to the "within country relative differences" model for belief in God on anxiety.
@@ -964,17 +1191,22 @@ Next we turn to the "within country relative differences" model for belief in Go
 
 ```{r cache = TRUE}
 m2b <- brm(
-  anx_s ~ age_s  + male  +  bg_within + bg_between +  (1  +  bg_within|country),
+  anx_s ~ age_s  + male  +  bg_within + bg_between +  (1  +  bg_within |
+                                                         country),
   data = d1,
   family = "gaussian",
   seed = 1234,
   warmup = 1000,
   iter = 300,
   chains = 4,
-  file = "m2_aa.rds")
+  file = "m2_aa.rds"
+)
 model_parameters(m2b, test = "p_direction")
 random_parameters(m2b)
 ```
+
+
+## Checks
 
 Same workflow for our checks, but we'll want to use more informative priors next time.
 
@@ -986,6 +1218,14 @@ mcmc_plot(m2b,
 ```
 
 No surprise, there is the same problem with the sampling distribution.
+
+
+
+```{r}
+mcmc_plot(m2b,
+          type = "intervals",
+          prob_outer = 0.89)
+```
 
 
 ```{r}
@@ -1006,14 +1246,17 @@ Summary:
 
 ```{r cache = TRUE}
 
-p<-brms::conditional_effects(m2b, "bg_within", 
-                              spaghetti = T,
-                              nsamples = 300,
-                              prob = .89,
-                              method = 'fitted')
+p <- brms::conditional_effects(
+  m2b,
+  "bg_within",
+  spaghetti = T,
+  nsamples = 300,
+  prob = .89,
+  method = 'fitted'
+)
 
 
-plot(p, plot = FALSE)[[1]] + scale_y_continuous(limits = c(-1,1))  + xlab("bg_within") + ylab ("anxiety in sd units") + 
+plot(p, plot = FALSE)[[1]] + scale_y_continuous(limits = c(-1, 1))  + xlab("bg_within") + ylab ("anxiety in sd units") +
   labs(title = "Predicted effects of bg_within")
 
 ```
@@ -1024,7 +1267,6 @@ And between
 
 
 ```{r cache = TRUE}
-
 p<-brms::conditional_effects(m2b, "bg_between", 
                               spaghetti = T,
                               nsamples = 300,
@@ -1032,32 +1274,184 @@ p<-brms::conditional_effects(m2b, "bg_between",
                               method = 'fitted')
 
 
-plot(p, plot = FALSE)[[1]] + scale_y_continuous(limits = c(-1,1))  + xlab("bg_between") + ylab ("anxiety in sd units") + 
+
+plot(p, plot = FALSE)[[1]] + scale_y_continuous(limits = c(-1, 1))  + xlab("bg_between") + ylab ("anxiety 1-5") +
   labs(title = "Predicted effects of bg_between")
 
 ```
 
 
-
 Here's the between country graphs:
 
 ```{r cache = TRUE}
-plot(ggeffects::ggpredict(m2b, terms = c("country[all]", "bg_within[minmax]"),type = "re", ci.lvl = 0.89))  +
-   scale_fill_brewer(palette= "Set2") + labs(
-    title = "Predicted effects of belief on anxiety")
+plot(ggeffects::ggpredict(
+  m2b,
+  terms = c("country[all]", "bg_within[minmax]"),
+  type = "re",
+  ci.lvl = 0.89
+))  +
+  scale_fill_brewer(palette = "Set2") + labs(title = "Predicted effects of belief on anxiety")
+```
+
+## TRY ORDINAL MODEL
+
+## Without demeaning
+```{r}
+m2o <- brm(
+  wb_psychANXIETY ~ bg_s +
+    age_s  +
+    male +
+    (1 + ch_s | country),
+  data = d1,
+  family = cumulative(link = "logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m2o"
+)
+parameters::model_parameters(m2o, test = "p_direction")
+parameters::random_parameters(m2o)
 ```
 
 
 
-To do: 
+This resolves the problem
+```{r}
+# YES
+pp_check(m2o)
+```
+
+Trace plots:
+
+```{r, cache = TRUE}
+mcmc_plot(m2o,
+          type = "trace")
+```
+
+Model summary
+```{r}
+parameters::model_parameters(m2o)
+```
+
+
+Plot model: nothing
+
+```{r, cache = TRUE}
+library(viridis)
+p0 <- brms::conditional_effects(
+  m2o,
+  "bg_s",
+  spaghetti = T,
+  categorical = TRUE,
+  nsamples = 200,
+  prob = .89,
+  method = 'fitted'
+)
+
+
+plot(p0, plot = FALSE)[[1]]   + xlab("bg") + ylab ("anxiety 1-5") +
+  labs(title = "Predicted effects of bg") # +  scale_color_viridis(discrete=TRUE) 
+```
+
+
+###  With demeaning
+
+
+```{r}
+m2_o <- brm(
+  wb_psychANXIETY ~ age_s  + male + bg_within +  bg_between + (1 + ch_within|country),  
+  data = d1,
+  family = cumulative(link ="logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m2_o")
+```
+
+
+This resolves the problem
+```{r}
+# YES
+pp_check(m2_o)
+```
+
+Trace plots:
+
+```{r, cache = TRUE}
+mcmc_plot(m2_o,
+          type = "trace")
+```
+
+Model summary
+```{r}
+parameters::model_parameters(m2_o)
+```
+
+
+Within: NOTHING
+```{r, cache = TRUE}
+library(viridis)
+p0bg <- brms::conditional_effects(
+  m2_o,
+  "bg_within",
+  spaghetti = T,
+  nsamples = 200,
+  categorical = TRUE,
+  prob = .89,
+  method = 'fitted'
+)
+
+
+ppbg_w<- plot(p0bg, plot = FALSE)[[1]]   + xlab("bg_within") + ylab ("anxiety 1-5") +
+  labs(title = "Predicted effects of BeliefGod_within") # +  scale_color_viridis(discrete=TRUE) 
+ppbg_w
+```
+
+BETWEEN: Yes, and at the highest levels of anxiety. 
+
+```{r cache = TRUE}
+pbg <- brms::conditional_effects(
+  m2_o,
+  "bg_between",
+  spaghetti = T,
+  nsamples = 200,
+  prob = .89,
+  categorical = TRUE,
+  method = 'fitted'
+)
+
+
+ppbg_b<- plot(pbg, plot = FALSE)[[1]]   + xlab("bg_between") + ylab ("anxiety: 1-5") +
+  labs(title = "Predicted effects of BeliefGod_between")
+ppbg_b
+```
+
+
+## Summary graph
+
+```{r}
+library(patchwork)
+ppch_w +  ppbg_w  + ppch_b + ppbg_b + plot_annotation("What is the relationship between belief church and belief on anxiety?", subtitle = "No evidence for within-person differences, evidence for between country differences at the high end of anxiety", tag_levels = "a") +  plot_layout(guides = 'collect')
+
+#bulbulia_summary_graph_many_analysts
+```
+
+
+
+
+## To do
 
   1. Tidy up graphs and check all labels.
+  
+  2. Remove clutter.
 
 
-  2. Use stronger priors and include stronger prior predictive checks
+  3. Use stronger priors and include stronger prior predictive checks
 
 
-  3. Sample from an ordinal outcome distribution: obtain un-transformed data from Suzanne
+  3. Sample from an ordinal outcome distribution: obtain un-transformed data from Suzanne NOTE: DONE!, but still need to get church frequency as a monotonic predictor!
 
 
   4. Develop discussion about model assumptions and limitations, such as
@@ -1084,3 +1478,7 @@ To do:
 
 
 To be continued...
+
+
+## APPENDIX
+

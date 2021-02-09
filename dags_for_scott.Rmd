@@ -1,0 +1,238 @@
+---
+title: "Dags for Scott"
+author: "Joseph Bulbulia"
+date: "28/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Dag shoes two adjustment sets
+```{r}
+library(ggdag)
+library(dagitty)
+library(ggplot2)
+library(tidyverse)
+
+# more complex
+dg <- dagify(
+  ms  ~  mg + time,
+  mg ~ time + L,
+  L ~ time, 
+  exposure =  "mg",
+  outcome =   "ms"
+) %>%
+  tidy_dagitty()
+
+
+colliders<-ggdag::ggdag_collider(dg,
+                      from = "mg",
+                      to = "ms",
+                      control_for(c("time", "L")))+   theme_dag_blank() + labs(title = "colliders")
+colliders
+p1<-ggdag(dg)+ theme_dag_blank() + labs(title = "dag")
+
+# graph adjustment sets
+p2 <-ggdag::ggdag_adjustment_set(dg) + labs(title = "adjustment set") +
+  theme(legend.position = "bottom") + theme_dag_blank() 
+p1 + p2 + plot_annotation(title = "To infer path from MG --> MS we only need to condition on time",
+                          subtitle = "assume:  
+                          ms ~ mg + time, 
+                          mg ~ time + L, 
+                          L ~ time, 
+                          exposure =  mg,
+                          outcome =   ms")
+
+ggdag_dseparated(dg,
+  from = "mg",
+  to = "ms",
+  controlling_for = c("time", "L"),
+  collider_lines = TRUE
+) + theme_dag_blank() + labs(title = "d-relationships") 
+
+p1 + plot_annotation(title = "To infer path from MG --> MS we only need to condition on time") 
+
+
+
+# ggdag_drelationship(dg,
+#   from = "mg",
+#   to = "ms",
+#   controlling_for = c("time","L"),
+#   collider_lines = TRUE
+# ) + theme_dag_blank()
+
+
+
+##play
+dg2 <- dagify(
+  mg  ~ time + L,
+  ms ~  time + L,
+  mg ~~ ms,
+  L ~ time, 
+  exposure =  "ms",
+  outcome =   "mg"
+) %>%
+  tidy_dagitty()
+
+
+ggdag::ggdag_collider(dg2,
+                      from = "ms",
+                      to = "mg",
+                      control_for(c("time", "L"))) +   theme_dag_blank()
+
+
+
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(dg2, node_size = 14) +
+  theme(legend.position = "bottom") + theme_dag_blank()
+
+
+## SIMPLE
+dg2 <- dagify(
+  mgPRE  ~ time,
+  ms ~  mgPRE + time + U,
+  U ~ time, 
+  exposure =  "mgPRE",
+  outcome =   "ms"
+) %>%
+  tidy_dagitty()
+
+
+jb1<-ggdag::ggdag_collider(dg2,
+                      from = "mgPRE",
+                      to = "ms",
+                      control_for(c("time", "U"))) +   theme_dag_blank() + labs(title = "colliders")
+jb1
+
+
+# graph adjustment sets
+jb2<- ggdag::ggdag_adjustment_set(dg2, node_size = 14) +
+  theme(legend.position = "bottom") + theme_dag_blank()  + labs(title = "adjustment set")
+
+jb2
+library(patchwork)
+jb1 / jb2 + plot_annotation(title = "If we think mega-societies and moralising gods co-evolve then we we might not get an obtain an unbaised estimate", tag_levels = "a") 
+
+#####
+
+
+
+# more complex
+tidy_ggdag2 <- dagify(
+  wb  ~ rel + age + male + ses + cntry + den,
+  rel ~ age + male + cntry + den,
+  ses ~ age  + cntry,
+  cntry ~ lang + den, 
+  exposure =  "rel",
+  outcome =   "wb"
+) %>%
+  tidy_dagitty()
+
+
+#Here's the trouble with Scott's model
+ggdag::ggdag_collider(tidy_ggdag2,
+                      from = "rel",
+                      to = "wb",
+                      control_for(c("ses", "male", "cntry", "age","den","lang"))) +   theme_dag_blank()
+
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) +
+  theme(legend.position = "bottom") 
+
+
+
+ggdag_drelationship(tidy_ggdag2,
+  from = "rel",
+  to = "wb",
+  controlling_for = c("ses", "male", "cntry", "age", "den","lang"),
+  collider_lines = TRUE
+) + theme_dag_blank()
+
+
+```
+
+```{r}
+tidy_ggdag2 <- dagify(
+  wb  ~ rel + age + male + ses + cntry + den,
+  rel ~ age + male + cntry + den,
+  ses ~ age  + cntry,
+  cntry ~ den, 
+  exposure =  "rel",
+  outcome =   "wb"
+) %>%
+  tidy_dagitty()
+
+
+#Here's the trouble with Scott's model
+ggdag::ggdag_collider(tidy_ggdag2,
+                      from = "rel",
+                      to = "wb",
+                      control_for(c("ses", "male", "cntry", "age","den","lang"))) +   theme_dag_blank()
+
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) +
+  theme(legend.position = "bottom") 
+```
+
+
+```{r eval }
+tidy_k6 <- dagify(
+  k6  ~ covid + mean + rel + male + income + age + rest,
+  mean ~ rel + male  + age + rest,
+  rel ~ age  + male,
+  income ~ edu, 
+  exposure =  "rel",
+  outcome =   "k6"
+) %>%
+  tidy_dagitty()
+
+
+#Here's the trouble with Scott's model
+ggdag::ggdag_collider(tidy_k6,
+                      from = "covid",
+                      to = "k6",
+                      control_for(c("rel", "male", "mean", "age","income"))) +   theme_dag_blank()
+
+# graph adjustment sets
+ggdag::ggdag_adjustment_set(tidy_k6, node_size = 14) +
+  theme(legend.position = "bottom") 
+
+ggdag::ggdag_collider(tidy_k6,
+                      from = "covid",
+                      to = "k6",
+                      controlling_for = c( "male","age")) +   theme_dag_blank()
+
+
+ggdag_drelationship(tidy_k6,
+from = "covid",
+                      to = "k6",
+                      controlling_for = c( "male","age","covid"), collider_lines = TRUE
+) + theme_dag_blank()
+
+
+```
+
+```{r eval = FALSE}
+remotes::install_github("BS1125/CMAverse")
+library(CMAverse)
+cmdag(outcome = "K6", exposure = "cv", mediator = c("FT", "Work"), 
+      basec = c("C1", "C2"), postc = NULL, node = FALSE, text_col = "black")
+
+
+cmdag(
+  outcome = "K6",
+  exposure = "COV",
+  mediator = "F",
+  basec = "male",
+  postc = "reld"
+)
+
+```
+
+
+
+### Confounder bias if we include our theoretically proposed causal mediators!
+
+Before proceeding with the model, note a curiosity. If our interest is in the direct effects of church attendance on well-being we should *not* include social support because this introduces a collider bias. 
+

@@ -20,6 +20,50 @@ knitr::opts_chunk$set(#
 ```{r runanalysis, echo=FALSE, include = FALSE}
 source("libs.R") # libraries 
 source("funs.R") # custom functions
+
+# libraries
+# libraries and settings
+library("tidyverse")
+library("easystats")
+library("ggplot2") #plots
+library("sjstats") #test statistics
+library("sjPlot")
+library("sjmisc")
+library("insight")
+library("see")
+library("performance")
+library("ggraph")
+library("parameters")
+library("lme4")
+library("psych") ## correlation matrix
+library("table1")
+library("ggeffects")
+library("gghighlight")
+#library("naniar") # missingness
+#library("Amelia")
+#library("magrittr")
+library("patchwork")
+library("texreg")
+library("viridis")
+library("ggpubr")
+library("ggsci") 
+library("here")
+library("citr")
+library("rethinking")
+#library("statsExpressions")
+library("ggstatsplot")
+library("ggthemes")
+library("ggdag")
+library("papaja")
+library("rstan")
+library("brms")
+library("tidybayes")
+library("bayesplot")
+library("dagitty")
+library("ggdag")
+rstan_options(auto_write=TRUE)
+options(mc.cores=parallel::detectCores ())
+theme_set(theme_few())
 ```
 
 ## Workflow and analysis
@@ -29,7 +73,10 @@ First, we import the data (see functions).
 
 ```{r}
 # import data
-d <- data_read_mymachine()
+d <- as.data.frame(
+  read.csv(here::here("MARP_data_blinded.csv")
+  )
+)
 ```
 
 Next, we inspect the data. A key problem is that many columns data have been transformed from their raw form into a number between 0 and 1. Later we'll see that these transformations render the modelling less reliable than if the data were retained. 
@@ -123,7 +170,7 @@ rename(
 
 ## Missingness
 
-Next we need to examine patterns of missingness, which might spoil inference.
+Next we need to examine patterns of missing-ness, which might spoil inference.
 
 ```{r cache = TRUE}
 library("naniar")
@@ -500,6 +547,7 @@ m1 <- brm(
     age_s  +
     male +
     (1 + ch_s | country),
+  sample_prior = TRUE,
   data = d1,
   family = "gaussian",
   seed = 1234,
@@ -574,8 +622,8 @@ prior_summary(m1)
 However we cannot sample from the models priors because some are improper.
 
 ```{r}
+library(coda)
 samples1 <- brms::prior_samples(m1, "b_ch_s")
-samples1
 ```
 
 

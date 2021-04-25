@@ -2,7 +2,7 @@
 # functions used in this analysis
 data_read_mymachine <- function() {
   out <-
-    read.csv("/Users/jbul176/Documents/GitHub/many_analysts/MARP_data_blinded.csv")
+    read.csv(here::here("MARP_data_blinded.csv"))
 }
 
 

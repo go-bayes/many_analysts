@@ -1250,6 +1250,7 @@ m2b <- brm(
   chains = 4,
   file = "m2_aa.rds"
 )
+head(m2_aa.rds)
 model_parameters(m2b, test = "p_direction")
 random_parameters(m2b)
 ```

@@ -12,6 +12,8 @@ output:
   distill::distill_article:
     self_contained: true
     toc: true
+    code_folding: true
+    highlight: kate
 ---
 
 ```{r global_options, echo=FALSE, include = FALSE}
@@ -20,7 +22,7 @@ knitr::opts_chunk$set(#
   message=FALSE, 
   warning=FALSE,
   collapse =TRUE,
-  echo=FALSE, 
+  echo=TRUE, 
   #results="hide", 
   fig.width= 10,
   fig.height=10,
@@ -200,7 +202,7 @@ Does church attendance predict anxiety?
 
 ### Model
 
-```{r}
+```{r echo}
 m1o <- brm(
   wb_psychANXIETY ~ ch_s +
     age_s  +

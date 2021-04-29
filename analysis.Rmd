@@ -244,6 +244,21 @@ parR<-parameters::model_parameters(m1o,effects = "random" )
 plot(parR,  sort = TRUE) +theme_lucid() #option -->
 ```
 
+No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s)  0.24  [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model. 
+
+
+
+```{r}
+plot(ggeffects::ggpredict(
+  m1o,
+  terms = c("country[all]", "ch_s[minmax]"),
+  type = "re",
+  ci.lvl = 0.89
+)) + scale_color_viridis_d() + 
+  theme_classic()
+```
+
+
 Graphing results wee see that the effects are driven entirely at the high end of the anxiety scale.  This is consistent with a demand characteristic. Anxiety draws people to religion (Sibley and Bulbulia 2012)
 
 ```{r, cache = TRUE}
@@ -319,6 +334,19 @@ India, however, is clearly an outlier.
 ```{r}
 parR<-parameters::model_parameters(m2o,effects = "random" ) 
 plot(parR,  sort = TRUE) +theme_lucid() #option -->
+```
+
+No country level predictions in the slope/intercept covariance:
+
+```{r}
+plot(ggeffects::ggpredict(
+  m2o,
+  terms = c("country[all]", "bg_s[minmax]"),
+  type = "re",
+  ci.lvl = 0.89
+)) +
+  scale_color_viridis_d() +
+  theme_classic()
 ```
 
 

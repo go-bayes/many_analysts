@@ -76,6 +76,7 @@ options(mc.cores=parallel::detectCores ())
 theme_set(theme_few())
 ```
 
+
 ## Workflow and analysis
 
 First, we import the data (see functions).
@@ -86,44 +87,6 @@ d <- as.data.frame(
   read.csv(here::here("MARP_data.csv")
   )
 )
-```
-
-Next, we inspect the data. A challenge is that many columns data have been transformed from their raw form into a number between 0 and 1. Later we'll see that these transformations render the modelling less reliable than if the data were retained.
-
-So for the next iteration, we'll need the data as they were recorded. Specially we'll focus on the variables such as
-
-> How often do you have negative feelings such as blue mood, despair, anxiety, depression
-
-We'll investigate church frequency and belief in God as predictors of this dimension of well-being.
-
-```{r, echo = FALSE, include = FALSE}
-#inspect data frame
-str(d) # need to create factors, where factors are needed.
-```
-
-```{r, Include = FALSE}
-hist(d$rel_1)  # yikes -- factors (church freq was made into a number :(  loss of signal 
-hist(d$rel_1)  # yikes -- factors prayer freq was made into a number  :(  loss of signal
-```
-
-```{r, include = FALSE}
-table(d$rel_3,useNA = "ifany") # This is absolutely not good. 
-```
-
-```{r include = FALSE}
-#  need to recode factors -- NAs should be NAs, otherwise, we should describe them as missingness, so will avoid these variables
-table(d$ethnicity,  useNA = "ifany") # need recode NA as "not identified"
-table(d$denomination, useNA = "ifany") # need recode NA as "no denomination" 
-# fix
-d$denomination[is.na(d$denomination)] <- "not_reported"
-d$ethnicity[is.na(d$ethnicity)] <- "not_reported"
-#d$wb_soc_3[is.na(d$wb_soc_3)] <- "not_reported" # Sat with sex
-```
-
-```{r, include = FALSE}
-# what are the numbers here? 
-table(d$attention_check, useNA = "ifany")
-d$wb_phys_mean
 ```
 
 ```{r cache = TRUE}
@@ -184,6 +147,325 @@ df <- d %>%
     )
   )
 
+```
+
+
+```{r}
+# get data into shape
+d1 <- df %>%
+  dplyr::filter(
+    !is.na(wb_psychANXIETY),
+    !is.na(age),
+    !is.na(rel_CHURCHFREQ),
+    !is.na(wb_psychMEANING),
+    !is.na(male),
+    !is.na(rel_EXTENTBELIEVEGOD),
+  ) %>%
+  dplyr::mutate(
+    anx = as.numeric(wb_psychANXIETY),
+    anx_s = scale(wb_psychANXIETY),
+    #put outcome in ST units (see McElreath 2021)  # not necessary
+    age_s = scale(age),
+    ch = rel_CHURCHFREQ,
+    mn  = wb_psychMEANING,
+    bg =  rel_EXTENTBELIEVEGOD,
+    ch_s = scale(rel_CHURCHFREQ),
+    mn_s = scale(wb_psychMEANING),
+    bg_s = scale(rel_EXTENTBELIEVEGOD)
+  ) %>%
+  dplyr::select(anx,
+                ch,
+                mn,
+                bg,
+                anx_s,
+                age_s,
+                ch_s,
+                mn_s,
+                male2,
+                country,
+                male,
+                bg_s,
+                wb_psychANXIETY)
+
+## degroup variables for within and between analysis
+## https://cran.r-project.org/web/packages/parameters/vignettes/demean.html
+d1 <-
+  cbind(d1,
+        demean(d1, select = c("anx", "ch", "bg"), group = "country"))
+```
+
+## Results summary: Anxiety ~ church
+
+Does church attendance predict anxiety? 
+
+### Model
+
+```{r}
+m1o <- brm(
+  wb_psychANXIETY ~ ch_s +
+    age_s  +
+    male +
+    (1 + ch_s | country),
+  data = d1,
+  family = cumulative(link ="logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m1o_real"
+)
+```
+
+### Results
+
+
+```{r}
+parameters::model_parameters(m1o, test = "p_direction")
+parameters::random_parameters(m1o, component = "conditional")
+```
+
+Coefficient plots
+
+More church attendance predicts greater anxiety
+
+```{r}
+parF<-parameters::model_parameters(m1o ) 
+plot(parF,  sort = TRUE) +theme_lucid() #option -->
+```
+
+Variability in country intercepts, slope interactions not reliable. 
+
+India, however, is clearly an outlier. 
+
+```{r}
+parR<-parameters::model_parameters(m1o,effects = "random" ) 
+plot(parR,  sort = TRUE) +theme_lucid() #option -->
+```
+
+Graphing results wee see that the effects are driven entirely at the high end of the anxiety scale.  This is consistent with a demand characteristic. Anxiety draws people to religion (Sibley and Bulbulia 2012)
+
+```{r, cache = TRUE}
+library(viridis)
+p0b<-brms::conditional_effects(m1o, "ch_s", 
+                              spaghetti = T,
+                              nsamples = 200,
+                              categorical = T,
+                              prob = .89,
+                              method = 'fitted')
+
+
+plot(p0b, plot = FALSE)[[1]]   + xlab("ch_s") + ylab ("anxiety 1-5") +
+  labs(title = "Predicted effects of ch_s")
+```
+
+
+### Checks:
+
+```{r}
+# YES
+pp_check(m1o)
+```
+
+Trace plots:
+
+```{r, cache = TRUE}
+mcmc_plot(m1o,
+          type = "trace")
+```
+
+
+
+## Results summary Belief ~ Anxiety 
+
+### Model
+```{r}
+m2o <- brm(
+  wb_psychANXIETY ~ bg_s +
+    age_s  +
+    male +
+    (1 + bg_s | country),
+  data = d1,
+  family = cumulative(link = "logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = "m2o_real.rds"
+)
+```
+
+### Results
+
+No clear predictive effect of belief on anxiety
+
+```{r}
+parameters::model_parameters(m2o, test = "p_direction")
+parameters::random_parameters(m2o)
+```
+
+Coefficient plots
+
+```{r}
+parF<-parameters::model_parameters( m2o ) 
+plot(parF,  sort = TRUE) +theme_lucid() #option -->
+```
+
+Variability in country intercepts, slope interactions not reliable. 
+
+India, however, is clearly an outlier. 
+
+```{r}
+parR<-parameters::model_parameters(m2o,effects = "random" ) 
+plot(parR,  sort = TRUE) +theme_lucid() #option -->
+```
+
+
+```{r, cache = TRUE}
+library(viridis)
+p0 <- brms::conditional_effects(
+  m2o,
+  "bg_s",
+  spaghetti = T,
+  categorical = TRUE,
+  nsamples = 200,
+  prob = .89,
+  method = 'posterior_epred'
+)
+
+
+plot(p0,
+     #  point_args = list(width = .3) ,
+     #  points = TRUE,
+     plot = FALSE)[[1]]   + xlab("bg") + ylab ("anxiety 1-5") +
+  labs(title = "Predicted effects of bg") # +  scale_color_viridis(discrete=TRUE) 
+```
+
+
+
+
+### Checks
+
+
+This resolves the problem
+
+```{r}
+# YES
+pp_check(m2o)
+```
+
+Trace plots:
+
+```{r, cache = TRUE}
+mcmc_plot(m2o,
+          type = "trace")
+```
+
+
+### Overall summary
+
+Church attendance positively predicts anxiety. This is consistent with theories that anxiety leads to greater demand in Church attendance. However, this question awaits future research.
+
+Belief in God is not reliably associated with greater or lower anxiety.
+
+### Group level-predictions
+
+There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. Finally India is an outlier
+
+## DETAILS OF ANLAYSIS FOR REPLICATION
+
+
+## Workflow and analysis
+
+First, we import the data (see functions).
+
+```{r}
+# import data
+d <- as.data.frame(
+  read.csv(here::here("MARP_data.csv")
+  )
+)
+
+
+# get data into shape
+d1 <- df %>%
+  dplyr::filter(
+    !is.na(wb_psychANXIETY),
+    !is.na(age),
+    !is.na(rel_CHURCHFREQ),
+    !is.na(wb_psychMEANING),
+    !is.na(male),
+    !is.na(rel_EXTENTBELIEVEGOD),
+  ) %>%
+  dplyr::mutate(
+    anx = as.numeric(wb_psychANXIETY),
+    anx_s = scale(wb_psychANXIETY),
+    #put outcome in ST units (see McElreath 2021)  # not necessary
+    age_s = scale(age),
+    ch = rel_CHURCHFREQ,
+    mn  = wb_psychMEANING,
+    bg =  rel_EXTENTBELIEVEGOD,
+    ch_s = scale(rel_CHURCHFREQ),
+    mn_s = scale(wb_psychMEANING),
+    bg_s = scale(rel_EXTENTBELIEVEGOD)
+  ) %>%
+  dplyr::select(anx,
+                ch,
+                mn,
+                bg,
+                anx_s,
+                age_s,
+                ch_s,
+                mn_s,
+                male2,
+                country,
+                male,
+                bg_s,
+                wb_psychANXIETY)
+
+## degroup variables for within and between analysis
+## https://cran.r-project.org/web/packages/parameters/vignettes/demean.html
+d1 <-
+  cbind(d1,
+        demean(d1, select = c("anx", "ch", "bg"), group = "country"))
+```
+
+
+Next, we inspect the data. A challenge is that many columns data have been transformed from their raw form into a number between 0 and 1. Later we'll see that these transformations render the modelling less reliable than if the data were retained.
+
+So for the next iteration, we'll need the data as they were recorded. Specially we'll focus on the variables such as
+
+> How often do you have negative feelings such as blue mood, despair, anxiety, depression
+
+We'll investigate church frequency and belief in God as predictors of this dimension of well-being.
+
+```{r, echo = FALSE, include = FALSE}
+#inspect data frame
+str(d) # need to create factors, where factors are needed.
+```
+
+```{r, Include = FALSE}
+hist(d$rel_1)  # yikes -- factors (church freq was made into a number :(  loss of signal 
+hist(d$rel_1)  # yikes -- factors prayer freq was made into a number  :(  loss of signal
+```
+
+```{r, include = FALSE}
+table(d$rel_3,useNA = "ifany") # This is absolutely not good. 
+```
+
+```{r include = FALSE}
+#  need to recode factors -- NAs should be NAs, otherwise, we should describe them as missingness, so will avoid these variables
+table(d$ethnicity,  useNA = "ifany") # need recode NA as "not identified"
+table(d$denomination, useNA = "ifany") # need recode NA as "no denomination" 
+# fix
+d$denomination[is.na(d$denomination)] <- "not_reported"
+d$ethnicity[is.na(d$ethnicity)] <- "not_reported"
+#d$wb_soc_3[is.na(d$wb_soc_3)] <- "not_reported" # Sat with sex
+```
+
+```{r, include = FALSE}
+# what are the numbers here? 
+table(d$attention_check, useNA = "ifany")
+d$wb_phys_mean
 ```
 
 ## Missingness
@@ -941,7 +1223,6 @@ p0b<-brms::conditional_effects(m1o, "ch_s",
 plot(p0b, plot = FALSE)[[1]]   + xlab("ch_s") + ylab ("anxiety 1-5") +
   labs(title = "Predicted effects of ch_s")
 # + scale_y_continuous(limits= c(1,5))# +  scale_color_viridis(discrete=TRUE) 
-
 ```
 
 <!-- Another plot method -->
@@ -1070,7 +1351,7 @@ plot(p0b, plot = FALSE)[[1]]   + xlab("ch_s") + ylab ("anxiety 1-5") +
 
 <!-- plot(par,  sort = TRUE) + theme_lucid() #option -->
 
---\> <!-- ``` -->
+<!-- ``` -->
 
 <!-- BETWEEN: Yes, and at the highest levels of anxiety.  -->
 
@@ -1548,25 +1829,25 @@ plot(p0,
 
 5.  Develop discussion about model assumptions and limitations, such as
 
-    -   Is the DAG we use here sensible?
+  -   Is the DAG we use here sensible?
 
-    -   Measurement equivalence?
+  -   Measurement equivalence?
 
-    -   India???
+  -   India???
 
-    -   Demand characteristics and heterogeneous populations.
+  -   Demand characteristics and heterogeneous populations.
 
-    -   Is the theory that religion causes well-being biologically sensible? Why I don't think so...
+  -   Is the theory that religion causes well-being biologically sensible? Why I don't think so...
 
-    -   Connect with the literature.
+  -   Connect with the literature.
 
-    -   Better describe potential for Simpson's paradoxes: country level data collection is likely to give the wrong inference about religion and well being!
+  -   Better describe potential for Simpson's paradoxes: country level data collection is likely to give the wrong inference about religion and well being!
 
-    -   Note that sociological-level data is what evolutionary scholars are collecting now -- and that such data do not clarify individual-level psychological processes. For individual-level processes we need to measure at the individual level.
+  -   Note that sociological-level data is what evolutionary scholars are collecting now -- and that such data do not clarify individual-level psychological processes. For individual-level processes we need to measure at the individual level.
 
-    -   Make the plug for longitudinal data: we have no understanding of demand characteristics. We get no real inference from the model here because our data are too limited.
+  -   Make the plug for longitudinal data: we have no understanding of demand characteristics. We get no real inference from the model here because our data are too limited.
 
-    -   Make a plug for DAGs, clarify how much trouble we can get into without an explicit causal model.
+  -   Make a plug for DAGs, clarify how much trouble we can get into without an explicit causal model.
 
 To be continued...
 

@@ -41,3 +41,5 @@ vignettes/*.pdf
 *.rds
 Figs/
 *.html
+# allow analysis to update to git
+!analysis.html

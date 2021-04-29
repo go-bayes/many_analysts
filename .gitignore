@@ -38,6 +38,6 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-.rds
+*.rds
 Figs/
 *.html

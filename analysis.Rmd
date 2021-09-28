@@ -93,6 +93,10 @@ d <- as.data.frame(
 
 ```{r cache = TRUE}
 # clean data:use informative names !
+
+# note from Suzanne: 
+# I do think it's actually a negative relation, as the anxiety item was reverse-coded (following the documentation from the WHO quality of life scale, from which the items were taken). This is indicated in the data documentation, but I can totally understand this got buried under all information that was provided. We tried to make the dataset as clean as possible since most teams just aggregated all well-being items (and the religiosity items). But in retrospect, this recoding did cause some confusion for a couple of teams that used only specific items (and prefered the ordinal scale). This is definitely something to take into account for future projects like this one. 
+
 df <- d %>%
   dplyr::mutate(male2 = ifelse(gender != "man", 1 , 2)) %>% # for index categorical variable, not change of meaning for gender. male and people who do not identify as male.
   dplyr::mutate(male = factor(ifelse(gender != "man", "male" , "notmale"))) %>%
@@ -149,6 +153,7 @@ df <- d %>%
     )
   )
 
+
 ```
 
 
@@ -164,7 +169,7 @@ d1 <- df %>%
     !is.na(rel_EXTENTBELIEVEGOD),
   ) %>%
   dplyr::mutate(
-    anx = as.numeric(wb_psychANXIETY),
+    anx = as.integer(6- wb_psychANXIETY), # reverse coded! rescale 1-5
     anx_s = scale(wb_psychANXIETY),
     #put outcome in ST units (see McElreath 2021)  # not necessary
     age_s = scale(age),
@@ -194,6 +199,9 @@ d1 <- df %>%
 d1 <-
   cbind(d1,
         demean(d1, select = c("anx", "ch", "bg"), group = "country"))
+
+
+
 ```
 
 ## Results summary: Anxiety ~ church
@@ -203,8 +211,9 @@ Does church attendance predict anxiety?
 ### Model
 
 ```{r echo}
+glimpse(d1)
 m1o <- brm(
-  wb_psychANXIETY ~ ch_s +
+    anx ~ ch_s +
     age_s  +
     male +
     (1 + ch_s | country),
@@ -214,7 +223,7 @@ m1o <- brm(
   warmup = 1000,
   iter = 3000,
   chains = 4,
-  file = "m1o_real"
+  file = here::here("models", "m1o_real")
 )
 ```
 
@@ -228,7 +237,7 @@ parameters::random_parameters(m1o, component = "conditional")
 
 Coefficient plots
 
-More church attendance predicts greater anxiety
+More church attendance predicts less anxiety
 
 ```{r}
 parF<-parameters::model_parameters(m1o ) 
@@ -259,13 +268,13 @@ plot(ggeffects::ggpredict(
 ```
 
 
-Graphing results wee see that the effects are driven entirely at the high end of the anxiety scale.  This is consistent with a demand characteristic. Anxiety draws people to religion (Sibley and Bulbulia 2012)
+Clear relationship between lower distress and greater religious service attendance
 
 ```{r, cache = TRUE}
 library(viridis)
 p0b<-brms::conditional_effects(m1o, "ch_s", 
                               spaghetti = T,
-                              nsamples = 200,
+                              ndraws = 200,
                               categorical = T,
                               prob = .89,
                               method = 'fitted')
@@ -297,7 +306,7 @@ mcmc_plot(m1o,
 ### Model
 ```{r}
 m2o <- brm(
-  wb_psychANXIETY ~ bg_s +
+  anx ~ bg_s +
     age_s  +
     male +
     (1 + bg_s | country),
@@ -307,7 +316,7 @@ m2o <- brm(
   warmup = 1000,
   iter = 3000,
   chains = 4,
-  file = "m2o_real.rds"
+  file = here::here("models", "m2o_real.rds")
 )
 ```
 
@@ -399,68 +408,14 @@ Belief in God is not reliably associated with greater or lower anxiety.
 
 ### Group level-predictions
 
-There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. Finally India is an outlier
+There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. Finally India is an outlier.
 
 ## DETAILS OF ANLAYSIS FOR REPLICATION
 
 
 ## Workflow and analysis
 
-First, we import the data (see functions).
-
-```{r}
-# import data
-d <- as.data.frame(
-  read.csv(here::here("MARP_data.csv")
-  )
-)
-
-
-# get data into shape
-d1 <- df %>%
-  dplyr::filter(
-    !is.na(wb_psychANXIETY),
-    !is.na(age),
-    !is.na(rel_CHURCHFREQ),
-    !is.na(wb_psychMEANING),
-    !is.na(male),
-    !is.na(rel_EXTENTBELIEVEGOD),
-  ) %>%
-  dplyr::mutate(
-    anx = as.numeric(wb_psychANXIETY),
-    anx_s = scale(wb_psychANXIETY),
-    #put outcome in ST units (see McElreath 2021)  # not necessary
-    age_s = scale(age),
-    ch = rel_CHURCHFREQ,
-    mn  = wb_psychMEANING,
-    bg =  rel_EXTENTBELIEVEGOD,
-    ch_s = scale(rel_CHURCHFREQ),
-    mn_s = scale(wb_psychMEANING),
-    bg_s = scale(rel_EXTENTBELIEVEGOD)
-  ) %>%
-  dplyr::select(anx,
-                ch,
-                mn,
-                bg,
-                anx_s,
-                age_s,
-                ch_s,
-                mn_s,
-                male2,
-                country,
-                male,
-                bg_s,
-                wb_psychANXIETY)
-
-## degroup variables for within and between analysis
-## https://cran.r-project.org/web/packages/parameters/vignettes/demean.html
-d1 <-
-  cbind(d1,
-        demean(d1, select = c("anx", "ch", "bg"), group = "country"))
-```
-
-
-Next, we inspect the data. A challenge is that many columns data have been transformed from their raw form into a number between 0 and 1. Later we'll see that these transformations render the modelling less reliable than if the data were retained.
+First, we inspect the data. A challenge is that many columns data have been transformed from their raw form into a number between 0 and 1. Later we'll see that these transformations render the modelling less reliable than if the data were retained.
 
 So for the next iteration, we'll need the data as they were recorded. Specially we'll focus on the variables such as
 
@@ -845,7 +800,7 @@ d1 <- df %>%
     !is.na(rel_EXTENTBELIEVEGOD),
   ) %>%
   dplyr::mutate(
-    anx = as.numeric(wb_psychANXIETY),
+    anx = as.numeric(6- wb_psychANXIETY), # recode
     anx_s = scale(wb_psychANXIETY),
     #put outcome in ST units (see McElreath 2021)  # not necessary
     age_s = scale(age),

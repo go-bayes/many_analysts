@@ -300,7 +300,6 @@ mcmc_plot(m1o,
 ```
 
 
-
 ## Results summary Belief ~ Anxiety 
 
 ### Model
@@ -366,7 +365,7 @@ p0 <- brms::conditional_effects(
   "bg_s",
   spaghetti = T,
   categorical = TRUE,
-  nsamples = 200,
+  ndraws = 200,
   prob = .89,
   method = 'posterior_epred'
 )
@@ -599,10 +598,11 @@ Substantial between country variation evident. India = very high
 Let's look at the anxiety indicator: India is much lower: .
 
 ```{r}
+wbpsych
 wb1 <- wbpsych %>%
   ggplot(aes(
     x = country,
-    y = wb_psychANXIETY,
+    y = 6 - wb_psychANXIETY, # reverse code
     group = country,
     color = country
   )) +
@@ -639,47 +639,48 @@ India again very high, and France is very low. Can we really assume measurement 
 
 Next, a quick run of correlations. Note that we need the to model the country level dependencies in any correlation matrix, given strong cultural differences
 
-Religion correlations
+<!-- Religion correlations -->
 
-```{r, cache = TRUE}
-rel %>%
-  correlation( partial = FALSE, multilevel = TRUE ) %>%
-  plot() + theme_blackboard()
-```
 
-General well-being correlations
+<!-- ```{r, cache = TRUE} -->
+<!-- rel %>% -->
+<!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+<!--   plot() + theme_blackboard() -->
+<!-- ``` -->
 
-```{r cache = TRUE}
-wbgen %>%
-  correlation( partial = FALSE, multilevel = TRUE ) %>%
-  plot() + theme_blackboard()
-```
+<!-- General well-being correlations -->
 
-Physical well-being correlations
+<!-- ```{r cache = TRUE} -->
+<!-- wbgen %>% -->
+<!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+<!--   plot() + theme_blackboard() -->
+<!-- ``` -->
 
-```{r}
-wbphys %>%
-  correlation( partial = FALSE, multilevel = TRUE ) %>%
-  summary()
+<!-- Physical well-being correlations -->
 
-wbphys %>%
-  correlation( partial = FALSE, multilevel = TRUE ) %>%
-  plot() + theme_blackboard()
-```
+<!-- ```{r} -->
+<!-- wbphys %>% -->
+<!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+<!--   summary() -->
 
-Psychological well-being correlations
+<!-- wbphys %>% -->
+<!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+<!--   plot() + theme_blackboard() -->
+<!-- ``` -->
 
-```{r}
-wbpsych %>%
-  select(-wb_psychMEANING)%>%
-  correlation( partial = FALSE, multilevel = TRUE ) %>%
-  summary()
+<!-- Psychological well-being correlations -->
 
-wbpsych %>%
-  select(-wb_psychMEANING)%>%
-  correlation( partial = FALSE, multilevel = TRUE ) %>%
-  plot()  + theme_abyss()
-```
+<!-- ```{r} -->
+<!-- wbpsych %>% -->
+<!--   select(-wb_psychMEANING)%>% -->
+<!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+<!--   summary() -->
+
+<!-- wbpsych %>% -->
+<!--   select(-wb_psychMEANING)%>% -->
+<!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+<!--   plot()  + theme_abyss() -->
+<!-- ``` -->
 
 ## Causal model
 

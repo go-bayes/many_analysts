@@ -164,7 +164,7 @@ d1 <- df %>%
     !is.na(wb_psychANXIETY),
     !is.na(age),
     !is.na(rel_CHURCHFREQ),
-    !is.na(wb_psychMEANING),
+   # !is.na(wb_psychMEANING),
     !is.na(male),
     !is.na(rel_EXTENTBELIEVEGOD),
   ) %>%
@@ -204,6 +204,241 @@ d1 <-
 
 ```
 
+## Causal Model: belief in God
+
+```{r}
+library("ggdag")
+library("dagitty")
+dg1a <- dagify(
+  anx  ~ belief + church +  ses + male + country + U,
+  belief ~ age + male + country + church + U,
+  church ~ age + male + country + U,
+  ses ~ country + age + edu,
+  edu ~ country + male, 
+  exposure =  "belief",
+  outcome =   "anx",
+  latent = "U",
+  labels = c(
+    "belief" = "belief God",
+    "church" = "religious service attendance",
+    "anx" = "anxiety",
+    "edu" = "education",
+    "ses" = "SES",
+    "male" = "male",
+    "country" = "country",
+    "age" = "age",
+    "U" = "Unmeasured
+    distressing life events"
+  )
+) #%>%
+ # tidy_dagitty()       
+
+d0a <-ggdag::ggdag(dg1a, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("What if we were to assume distressing events affect religion?")
+# graph adjustment sets
+
+d1a<-ggdag::ggdag_adjustment_set(dg1a, node_size = 14, text = FALSE, use_labels = "label") +
+  theme(legend.position = "bottom") +
+  theme_dag() + ggtitle("Then crossectional data could not avoid confounding")
+
+d1a
+
+
+dg1 <- dagify(
+  anx  ~ belief + church +  ses + male + country + U,
+  belief ~ age + male + country + church,
+  church ~ age + male + country,
+  ses ~ country + age + edu,
+  edu ~ country + male, 
+  exposure =  "belief",
+  outcome =   "anx",
+  latent = "U",
+  labels = c(
+    "belief" = "belief God",
+    "church" = "religious service attendance",
+    "anx" = "anxiety",
+    "edu" = "education",
+    "ses" = "SES",
+    "male" = "male",
+    "country" = "country",
+    "age" = "age",
+    "U" = "Unmeasured
+    distressing life events"
+  )
+) #%>%
+ # tidy_dagitty()       
+
+d0 <-ggdag::ggdag(dg1, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("Assumed Causal Relations")
+# graph adjustment sets
+
+d1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = "label") +
+  theme(legend.position = "bottom") +
+  theme_dag() + ggtitle("Adjustment sets for Belief in God")
+
+d1
+```
+
+
+## Causal model: religious service
+
+We condition on the following model:
+
+-   religion + ses + male + country + a different unmeasured latent variable1 (e.g. privilege) affects distress.
+
+-   age + male + country + and unmeasured latent variable2 (e.g. parent's religion, call this U1) affects Religion 
+
+-   country + age + an unmeasured latent variable1 causes ses (citations...)
+
+-   our "exposure" is religious service attendance or religious belief and our outcome is "anxiety"
+
+
+
+```{r}
+library("ggdag")
+dg2 <- dagify(
+  anx  ~ belief + church +  ses + male + country,
+  belief ~ age + male + country + church + U,
+  church ~ age + male + country,
+  ses ~ country + age + edu,
+  edu ~ country + male, 
+  exposure =  "church",
+  outcome =   "anx",
+  latent = "U",
+  labels = c(
+    "belief" = "belief God",
+    "church" = "religious service attendance",
+    "anx" = "anxiety",
+    "edu" = "education",
+    "ses" = "SES",
+    "male" = "male",
+    "country" = "country",
+    "age" = "age",
+    "U" = "Unmeasured
+    distressing life events"
+  )
+) %>%
+  tidy_dagitty()  
+
+ggdag::ggdag(dg2) + theme_dag()
+
+ggdag::ggdag(dg2, text = FALSE, use_labels = "label")  + theme_dag()
+# graph adjustment sets
+d2<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
+  theme(legend.position = "bottom") +
+  theme_dag() + ggtitle("Adjustment set for Religious Service")
+
+d2
+```
+
+
+Graph for paper 
+
+
+```{r}
+library(patchwork)
+( (d0)/(d1 + d2) +   plot_layout(guides = 'collect'))  +((d0a) + (d1a)) + plot_annotation(title = 'If distressing life events affect religious belief and behaviour, longtidinal data are needed for causal inference', tag_levels = "a")
+# 14/12
+```
+
+
+Graph for confounding
+
+```{r}
+library(patchwork)
+
+```
+
+
+
+## Results summary Belief ~ Anxiety 
+
+
+###  Model
+```{r}
+m1 <- brm(
+  anx ~
+    bg_s +
+    ch_s +
+    age_s  +
+    male +
+    (1 + bg_s | country),
+  data = d1,
+  family = cumulative(link = "logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = here::here("models", "m2o_real")
+)
+
+parameters::model_parameters(m1, test = "p_direction")
+brms::ranef(m1)
+summary(m1)
+```
+
+Coefficient plots
+
+Believe in God predicts less anxiety
+
+```{r}
+parF1 <- parameters::model_parameters(m1 ) 
+plot(parF1,  sort = TRUE) +theme_lucid() #option -->
+```
+
+Variability in country intercepts, slope interactions not reliable. 
+
+India, however, is clearly an outlier. 
+
+```{r}
+parR1<-parameters::model_parameters(m1,effects = "random" ) 
+plot(parR1,  sort = TRUE) +theme_lucid() #option -->
+```
+
+No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s)  0.24  [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model. 
+
+
+
+```{r}
+plot(ggeffects::ggpredict(
+  m1,
+  terms = c("country[all]", "bg_s[minmax]"),
+  type = "re",
+  ci.lvl = 0.89
+)) + scale_color_viridis_d() +  scale_y_continuous(limits = c(0,1)) + 
+  theme_bw()
+```
+
+
+Clear relationship between lower distress and greater religious service attendance
+
+```{r, cache = TRUE}
+library(viridis)
+p0<-brms::conditional_effects(m1, "bg_s", 
+                              spaghetti = T,
+                              ndraws = 200,
+                              categorical = T,
+                              prob = .89,
+                              method = 'fitted')
+
+
+plot(p0, plot = FALSE)[[1]]   + xlab("bg_s") + ylab ("anxiety 1-5") +
+  labs(title = "Predicted effects of bg_s")
+```
+
+
+### Checks:
+
+```{r}
+# YES
+pp_check(m1)
+```
+
+Trace plots:
+
+```{r, cache = TRUE}
+mcmc_plot(m1,
+          type = "trace")
+```
+
 ## Results summary: Anxiety ~ church
 
 Does church attendance predict anxiety? 
@@ -212,7 +447,7 @@ Does church attendance predict anxiety?
 
 ```{r echo}
 glimpse(d1)
-m1o <- brm(
+m2 <- brm(
     anx ~ ch_s +
     age_s  +
     male +
@@ -227,20 +462,17 @@ m1o <- brm(
 )
 ```
 
+
+
+
 ### Results
-
-
-```{r}
-parameters::model_parameters(m1o, test = "p_direction")
-parameters::random_parameters(m1o, component = "conditional")
-```
 
 Coefficient plots
 
 More church attendance predicts less anxiety
 
 ```{r}
-parF<-parameters::model_parameters(m1o ) 
+parF<-parameters::model_parameters(m2 ) 
 plot(parF,  sort = TRUE) +theme_lucid() #option -->
 ```
 
@@ -249,7 +481,7 @@ Variability in country intercepts, slope interactions not reliable.
 India, however, is clearly an outlier. 
 
 ```{r}
-parR<-parameters::model_parameters(m1o,effects = "random" ) 
+parR<-parameters::model_parameters(m2,effects = "random" ) 
 plot(parR,  sort = TRUE) +theme_lucid() #option -->
 ```
 
@@ -259,7 +491,7 @@ No country level differences trending at the high end of the anxiety scale for s
 
 ```{r}
 plot(ggeffects::ggpredict(
-  m1o,
+  m2,
   terms = c("country[all]", "ch_s[minmax]"),
   type = "re",
   ci.lvl = 0.89
@@ -272,7 +504,7 @@ Clear relationship between lower distress and greater religious service attendan
 
 ```{r, cache = TRUE}
 library(viridis)
-p0b<-brms::conditional_effects(m1o, "ch_s", 
+p0b<-brms::conditional_effects(m2, "ch_s", 
                               spaghetti = T,
                               ndraws = 200,
                               categorical = T,
@@ -289,125 +521,30 @@ plot(p0b, plot = FALSE)[[1]]   + xlab("ch_s") + ylab ("anxiety 1-5") +
 
 ```{r}
 # YES
-pp_check(m1o)
+pp_check(m2)
 ```
 
 Trace plots:
 
 ```{r, cache = TRUE}
-mcmc_plot(m1o,
+mcmc_plot(m2,
           type = "trace")
 ```
 
-
-## Results summary Belief ~ Anxiety 
-
-### Model
-```{r}
-m2o <- brm(
-  anx ~ bg_s +
-    age_s  +
-    male +
-    (1 + bg_s | country),
-  data = d1,
-  family = cumulative(link = "logit"),
-  seed = 1234,
-  warmup = 1000,
-  iter = 3000,
-  chains = 4,
-  file = here::here("models", "m2o_real.rds")
-)
-```
-
-### Results
-
-No clear predictive effect of belief on anxiety
-
-```{r}
-parameters::model_parameters(m2o, test = "p_direction")
-parameters::random_parameters(m2o)
-```
-
-Coefficient plots
-
-```{r}
-parF<-parameters::model_parameters( m2o ) 
-plot(parF,  sort = TRUE) +theme_lucid() #option -->
-```
-
-Variability in country intercepts, slope interactions not reliable. 
-
-India, however, is clearly an outlier. 
-
-```{r}
-parR<-parameters::model_parameters(m2o,effects = "random" ) 
-plot(parR,  sort = TRUE) +theme_lucid() #option -->
-```
-
-No country level predictions in the slope/intercept covariance:
-
-```{r}
-plot(ggeffects::ggpredict(
-  m2o,
-  terms = c("country[all]", "bg_s[minmax]"),
-  type = "re",
-  ci.lvl = 0.89
-)) +
-  scale_color_viridis_d() +
-  theme_classic()
-```
-
-
-```{r, cache = TRUE}
-library(viridis)
-p0 <- brms::conditional_effects(
-  m2o,
-  "bg_s",
-  spaghetti = T,
-  categorical = TRUE,
-  ndraws = 200,
-  prob = .89,
-  method = 'posterior_epred'
-)
-
-
-plot(p0,
-     #  point_args = list(width = .3) ,
-     #  points = TRUE,
-     plot = FALSE)[[1]]   + xlab("bg") + ylab ("anxiety 1-5") +
-  labs(title = "Predicted effects of bg") # +  scale_color_viridis(discrete=TRUE) 
-```
-
-
-
-
-### Checks
-
-
-This resolves the problem
-
-```{r}
-# YES
-pp_check(m2o)
-```
-
-Trace plots:
-
-```{r, cache = TRUE}
-mcmc_plot(m2o,
-          type = "trace")
-```
 
 
 ### Overall summary
 
-Church attendance positively predicts anxiety. This is consistent with theories that anxiety leads to greater demand in Church attendance. However, this question awaits future research.
+Belief in God predicts anxiety. This is consistent with theories that anxiety leads to greater demand for belif in God. However, this question awaits future research.
 
-Belief in God is not reliably associated with greater or lower anxiety.
+
+Church attendance positively predicts lower anxiety. 
 
 ### Group level-predictions
 
-There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. Finally India is an outlier.
+There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. India is an outlier.
+
+
 
 ## DETAILS OF ANLAYSIS FOR REPLICATION
 
@@ -681,101 +818,6 @@ Next, a quick run of correlations. Note that we need the to model the country le
 <!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
 <!--   plot()  + theme_abyss() -->
 <!-- ``` -->
-
-## Causal model
-
-Suppose we believe that:
-
--   religion + ses + male + country + a different unmeasured latent variable (e.g. privilege) causes well being (citations... )
-
--   age + male + country + and Unmeasured latent variable (e.g. parent's religion, call this U1) causes Religion (citations... )
-
--   country + age + another unmeasured latent variable (e.g. privilege U2) causes ses (citations...)
-
--   our "exposure" is religion and our outcome is "well-being"
-
-### Which variables should we condition on to understand the relationship between religion and well-being?
-
-We have two sets adjustments sets to chose from. We will pick the set with the measured indicators.
-
-```{r}
-tidy_ggdag <- dagify(
-  wb  ~ rel + ses + male + country +  U2,
-  rel ~ age + male + country + U1,
-  ses ~ country + age + U2,
-  exposure =  "rel",
-  outcome =   "wb"
-) %>%
-  tidy_dagitty() 
-
-# graph adjustment sets
-ggdag::ggdag_adjustment_set(tidy_ggdag, node_size = 14) +
-  theme(legend.position = "bottom") +
-  theme_dag_blank()
-```
-
-### Note: there is collider counfounding if we include all variables into our model
-
-Suppose we were to include *all* the variables in our model, except U2 and U1 which are not measured?
-
-In this case we would introduce collider bias!
-
-```{r}
-ggdag::ggdag_collider(tidy_ggdag,
-                      from = "rel",
-                      to = "wb",
-                      control_for(c("ses", "male", "country", "age")))
-
-```
-
-### Specifying the mechanism in relation to this dataset.
-
-We have yet to consider a mechanism by which religion might affect well-being, which will tell us specifically which aspects of well-being and which aspects of religion to focus on. Just as it might be tempting to throw all variables into a regression equation, and disastrous to do so, it might be tempting to leap into data reduction combining all variables without pausing to think what we want to know.
-
-There are many theories of how religion affects well-being we might consider (cite Highland et al). We will focus on two non-trivial theories -- one related to religious behavior and another related to religious belief. (Citations to follow ...)
-
-## Church attendance
-
-We propose that church attendance reduces psychological anxiety by increasing perceived social support (which is measured in this dataset as a well-being variable).
-
-This is a new model so we need to write our dag all over again. The dag will resemble the dag above, except we know that people who identify as male have less social support (typically), at least in some countries.
-
-We write the dag:
-
-### Causal Dag: church
-
-```{r}
-tidy_ggdag2 <- dagify(
-  wb  ~ support + ses + male + country + U2,
-  support ~ church + male + country + den,
-  church ~ age + male + country + den + U1,
-  ses ~ country + age + U2,
-  exposure =  "church",
-  outcome =   "wb"
-) %>%
-  tidy_dagitty()
-
-# graph adjustment sets
-ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) +
-  theme(legend.position = "bottom") +
-  theme_dag_blank()
-```
-
-The two adjustment sets are the same as in the original dag that we considered.
-
-#### Confounder bias if we include our theoretically proposed causal mediators!
-
-Before proceeding with the model, note a curiosity. If our interest is in the direct effects of church attendance on well-being we should *not* include social support because this introduces a collider bias.
-
-```{r}
-ggdag::ggdag_collider(tidy_ggdag2,
-                      from = "church",
-                      to = "wb",
-                      controlling_for(c("male", "support", "country", "age")))
-
-```
-
-Let this serve as a warning for us to think about our causation. We must develop our causal model before we leap into our statistical model.
 
 #### The statistical model
 
@@ -1444,73 +1486,16 @@ Lets consider the non-trivial theory that belief in God (bg) affects psychologic
 
 We begin by drawing the dag.
 
-```{r}
-tidy_ggdag2 <- dagify(
-  wb  ~ meaning + ses + male + country  + U2,
-  meaning ~ bg +  male + country,
-  bg ~ age + male + country + U1,
-  ses ~ country + age + U2,
-  exposure =  "bg",
-  outcome =   "wb"
-) %>%
-  tidy_dagitty()
-
-# graph adjustment sets
-ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) +
-  theme(legend.position = "bottom") +
-  theme_dag_blank()
-
-
-tidy_ggdag2 <- dagify(
-  wb  ~ meaning + ses + male + country  + U2,
-  meaning ~ bg +  male + country,
-  bg ~ age + male + country + U1,
-  ses ~ country + age + U2,
-  exposure =  "bg",
-  outcome =   "wb"
-) %>%
-  tidy_dagitty()
-
-# graph adjustment sets
-ggdag::ggdag_adjustment_set(tidy_ggdag2, node_size = 14) +
-  theme(legend.position = "bottom") +
-  theme_dag_blank()
-
-
-```
 
 And again, we face a collider bias. Our causal model shows us that if we were to include our meaning-making indicator in our statistical we will compromise inference!
 
 ```{r}
-ggdag::ggdag_collider(tidy_ggdag2,
+ggdag::ggdag_collider(dg1,
                       from = "church",
                       to = "wb",
                       controlling_for(c("male", "support", "country", "age")))
 ```
 
-### Causal DAG: belief
-
-From causal model we write our statistical model:
-
-```{r}
-m2 <- brm(
-  anx_s ~
-    bg_s  +
-    age_s  +
-    male +
-    (1 + bg_s | country),
-  data = d1,
-  family = "gaussian",
-  seed = 1234,
-  warmup = 1000,
-  iter = 3000,
-  chains = 4,
-  file = "m2_real"
-)
-parameters::model_parameters(m2, test = "p_direction")
-brms::ranef(m2)
-summary(m2)
-```
 
 We find weak effect for belief in God. No correlation of intercept and slope but India is an outlier.
 

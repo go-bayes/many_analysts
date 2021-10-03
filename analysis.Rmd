@@ -274,7 +274,7 @@ d1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = 
   theme(legend.position = "bottom") +
   theme_dag() + ggtitle("Adjustment sets for Belief in God")
 
-d1
+#d1
 ```
 
 
@@ -326,7 +326,7 @@ d2<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = 
   theme(legend.position = "bottom") +
   theme_dag() + ggtitle("Adjustment set for Religious Service")
 
-d2
+#d2
 ```
 
 
@@ -381,6 +381,7 @@ Believe in God predicts less anxiety
 
 ```{r}
 parF1 <- parameters::model_parameters(m1 ) 
+parF1
 plot(parF1,  sort = TRUE) +theme_lucid() #option -->
 ```
 

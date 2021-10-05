@@ -51,22 +51,22 @@ library("psych") ## correlation matrix
 library("table1")
 library("ggeffects")
 library("gghighlight")
+library("texreg")
+library("kableExtra")
 #library("naniar") # missingness
 #library("Amelia")
 #library("magrittr")
 library("patchwork")
 library("texreg")
-library("viridis")
-library("ggpubr")
-library("ggsci") 
+library("viridisLite")
+library("patchwork")
 library("here")
-library("citr")
-library("rethinking")
+#library("rethinking")
 #library("statsExpressions")
-library("ggstatsplot")
+#library("ggstatsplot")
 library("ggthemes")
 library("ggdag")
-library("papaja")
+#library("papaja")
 library("rstan")
 library("brms")
 library("tidybayes")
@@ -267,14 +267,14 @@ dg1 <- dagify(
 ) #%>%
  # tidy_dagitty()       
 
-d0 <-ggdag::ggdag(dg1, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("Assumed Causal Relations")
+dp0 <-ggdag::ggdag(dg1, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("Assumed Causal Relations")
 # graph adjustment sets
 
-d1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = "label") +
+dp1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = "label") +
   theme(legend.position = "bottom") +
   theme_dag() + ggtitle("Adjustment sets for Belief in God")
 
-#d1
+#dp1
 ```
 
 
@@ -322,11 +322,11 @@ ggdag::ggdag(dg2) + theme_dag()
 
 ggdag::ggdag(dg2, text = FALSE, use_labels = "label")  + theme_dag()
 # graph adjustment sets
-d2<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
+dp2<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
   theme(legend.position = "bottom") +
   theme_dag() + ggtitle("Adjustment set for Religious Service")
 
-#d2
+#dp2
 ```
 
 
@@ -335,21 +335,56 @@ Graph for paper
 
 ```{r}
 library(patchwork)
-( (d0)/(d1 + d2) +   plot_layout(guides = 'collect'))  +((d0a) + (d1a)) + plot_annotation(title = 'If distressing life events affect religious belief and behaviour, longtidinal data are needed for causal inference', tag_levels = "a")
+( (dp0)/(dp1 + dp2) +   plot_layout(guides = 'collect'))  +((d0a) + (d1a)) + plot_annotation(title = 'If distressing life events affect religious belief and behaviour, longtidinal data are needed for causal inference', tag_levels = "a")
 # 14/12
 ```
+
+```{r}
+library(lme4)
+
+
+```
+
+
 
 
 Graph for confounding
 
 ```{r}
 library(patchwork)
+m0 <- lmer(
+    anx ~
+    bg_s +
+  #  ch_s +
+    age_s  +
+    male +
+    ( bg_s | country), 
+  data = d1)
+
+
+sjPlot::tab_model(m0)
+
+m0 <- brm(
+  anx ~
+    bg_s +
+    #ch_s +
+    age_s  +
+    male +
+    (1 + bg_s | country),
+  data = d1,
+  family = cumulative(link = "logit"),
+  seed = 1234,
+  warmup = 1000,
+  iter = 3000,
+  chains = 4,
+  file = here::here("models", "m2o_real")
+)
 
 ```
 
 
 
-## Results summary Belief ~ Anxiety 
+## Results summary Anxiety ~ Belief
 
 
 ###  Model
@@ -391,7 +426,7 @@ India, however, is clearly an outlier.
 
 ```{r}
 parR1<-parameters::model_parameters(m1,effects = "random" ) 
-plot(parR1,  sort = TRUE) +theme_lucid() #option -->
+belief_random <- plot(parR1,  sort = TRUE) +theme_lucid()  + labs(title = "Country level heterogeneity in belief (co)-variances: India is an outlier.") 
 ```
 
 No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s)  0.24  [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model. 
@@ -421,8 +456,8 @@ p0<-brms::conditional_effects(m1, "bg_s",
                               method = 'fitted')
 
 
-plot(p0, plot = FALSE)[[1]]   + xlab("bg_s") + ylab ("anxiety 1-5") +
-  labs(title = "Predicted effects of bg_s")
+belief_fixed <- plot(p0, plot = FALSE)[[1]]   + xlab("belief (standardised)") + ylab ("anxiety (ordinal 1-5)") +
+  labs(title = "Increasing belief predicts increasing anxiety")
 ```
 
 
@@ -473,8 +508,8 @@ Coefficient plots
 More church attendance predicts less anxiety
 
 ```{r}
-parF<-parameters::model_parameters(m2 ) 
-plot(parF,  sort = TRUE) +theme_lucid() #option -->
+parc<-parameters::model_parameters(m2 ) 
+plot(parc,  sort = TRUE) + theme_lucid() #option -->
 ```
 
 Variability in country intercepts, slope interactions not reliable. 
@@ -482,8 +517,8 @@ Variability in country intercepts, slope interactions not reliable.
 India, however, is clearly an outlier. 
 
 ```{r}
-parR<-parameters::model_parameters(m2,effects = "random" ) 
-plot(parR,  sort = TRUE) +theme_lucid() #option -->
+parcR<-parameters::model_parameters(m2,effects = "random" ) 
+church_random <- plot(parcR,  sort = TRUE) +theme_lucid() + labs(title = "Country level heterogeneity in religious service (co)-variances: India is again an outlier.") #option -->
 ```
 
 No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s)  0.24  [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model. 
@@ -513,9 +548,22 @@ p0b<-brms::conditional_effects(m2, "ch_s",
                               method = 'fitted')
 
 
-plot(p0b, plot = FALSE)[[1]]   + xlab("ch_s") + ylab ("anxiety 1-5") +
-  labs(title = "Predicted effects of ch_s")
+church_fixed <-plot(p0b, plot = FALSE)[[1]]  + xlab("religious service attendance (standardised)") + ylab ("anxiety (ordinal 1-5)") +
+  labs(title = "Increasing religious service attendence predicts lower anxiety.")
+
+church_fixed
 ```
+
+
+Combined plot
+
+```{r}
+(belief_fixed + church_fixed )/( belief_random + church_random  ) +
+  plot_annotation(tag_levels = "a") + plot_layout(guides = "collect")
+
+# coef_graph 15 x 15 
+```
+
 
 
 ### Checks:
@@ -544,6 +592,142 @@ Church attendance positively predicts lower anxiety.
 ### Group level-predictions
 
 There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. India is an outlier.
+
+
+
+
+
+## Tables
+
+### Anxiety ~ Belief
+
+```{r}
+library(kableExtra)
+parameters::parameters(
+  m1,
+  test = "pd",
+  priors = FALSE, 
+  effects = "all",
+  drop = TRUE,
+  group_level = FALSE,
+  diagnostic = "Rhat") %>%
+    mutate_if(is.numeric, ~ round(., 2)) %>%
+    mutate_all(funs(str_replace(., "b_", ""))) %>%
+    kable(booktabs = T, "latex", caption =  "Belief in God is positively related to anxiety") %>%
+    print()
+```
+
+### Anxiety ~ Chruch
+```{r}
+library(kableExtra)
+parameters::parameters(
+  m2,
+  test = "pd",
+  priors = FALSE, 
+  effects = "all",
+  drop = TRUE,
+  group_level = FALSE,
+  diagnostic = "Rhat") %>%
+    mutate_if(is.numeric, ~ round(., 2)) %>%
+    mutate_all(funs(str_replace(., "b_", ""))) %>%
+    kable(booktabs = T, "latex", caption =  "Religious Service is negatively related to anxiety") %>%
+    print()
+```
+
+
+
+## Simulation
+
+
+
+```{r}
+set.seed(123)
+n <- 1000
+U <- rnorm( n ) # distressing events (unmeasured)
+C <- rnorm( n, U ) # religious service attendance, increase with distress
+B <- rnorm( n , C + U ) )# belief increase with service + distressing events
+Y <- rnorm( n , U - C ) # measured distress caused by distress, reduced by church attendance. 
+
+# simulate data
+simdat <- data.frame(
+  Belief = B, # belief
+  ReligiousService = C, # religious service
+  U = U, # distressing events (unmeasured)
+  Anxiety = Y  # outcome
+  )
+
+# summarise results
+summary(
+  mod1 <- lm(Anxiety ~ Belief + ReligiousService, data = simdat)
+)
+```
+
+
+We can convince ourselves of this result by replicating it many times
+
+```{r}
+sim_fun = function() {
+n <- 1000
+U <- rnorm( n ) # distressing events (unmeasured)
+C <- rnorm( n, U ) # religious service attendance, increase with distress
+B <- rnorm( n , C + U ) # belief increase with service + distressing events
+Y <- rnorm( n , U - C ) # measured distress caused by distress, reduced by church attendance. 
+# simulate data
+simdat <- data.frame(Belief = B, # belief
+  ReligiousService = C, # religious service
+  U = U, # distressing events (unmeasured)
+  Anxiety = Y)
+  sim_s <- lm(Anxiety ~ Belief + ReligiousService, data = simdat)
+  sim_s
+}
+
+# Replication 1000xs
+r_lm = replicate(1000, sim_fun(), simplify = FALSE )
+
+# extract simulations
+tab_sim<-purrr::map_dfr(r_lm, broom::tidy)
+
+# extract belief coefficients
+mout<-tab_sim %>%
+  dplyr::filter(term =="Belief")%>%
+  dplyr::mutate_if(is.numeric, round, 5)
+
+# calculate proportion of estimates greater than 0
+# all positive
+sum(mout$estimate > 0) / length(mout$estimate)
+
+# proportion of belief coefficient p.values < .001
+sum(mout$p.value <.001) / length(mout$p.value)
+
+# extract religious service coefficients
+tout<-tab_sim %>%
+  dplyr::filter(term =="ReligiousService")%>%
+  dplyr::mutate_if(is.numeric, round, 5)
+
+# calculate proportion of estimates less than 0
+# all negative
+sum(tout$estimate < 0) / length(tout$estimate)
+
+# proportion of service coefficient p.values < .001
+sum(tout$estimate > 0) / length(tout$estimate)
+```
+
+
+```{r}
+parameters::parameters(
+  mod1,
+  test = "pd",
+  priors = FALSE, 
+  effects = "all",
+  drop = TRUE,
+  group_level = FALSE,
+  diagnostic = "Rhat") %>%
+    mutate_if(is.numeric, ~ round(., 2)) %>%
+    mutate_all(funs(str_replace(., "b_", ""))) %>%
+    kable(booktabs = T, "latex", caption =  "Simulation reveals how church attendance and belief can deviate where distress increases religious service attendance and belief in God") %>%
+    print()
+
+```
 
 
 

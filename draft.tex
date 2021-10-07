@@ -1,0 +1,188 @@
+%%
+%% This is file `./samples/longsample.tex',
+%% generated with the docstrip utility.
+%%
+%% The original source files were:
+%%
+%% apa7.dtx  (with options: `longsample')
+%% ----------------------------------------------------------------------
+%% ----------------------------------------------------------------------
+%% 
+\documentclass[man]{article}%{apa7}
+\usepackage{listings}
+\usepackage{booktabs}
+%\usepackage{lipsum}
+\usepackage[doublespacing]{setspace}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage[utf8]{inputenc}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{rotating}
+\usepackage[american]{babel}
+
+%\usepackage{csquotes}
+\usepackage[style=apa,sortcites=true,sorting=nyt,backend=biber]{biblatex}
+%\DeclareLanguageMapping{american}{american-apa}
+%\addbibresource{bibliography.bib}
+
+\title{Why an explicit causal model is needed to infer how religion affects mental health: an illustration using MARP data} 
+
+\author{Joseph A. Bulbulia}
+\affiliation{Victoria University of Wellington, New Zealand}
+
+\leftheader{Bulbulia}
+
+\abstract{The literature on religion and health is expansive. However, most studies in this area lack explicit causal models. We use Many Analysts of Religion Project (MARP) data to illustrate how a ``model free'' approach can mislead, and describe practical tools for model-based causeal inference.} 
+
+\keywords{Anxiety, Causation, DAG, Directed Acyclic Graph, Distress, Religion Well-being}
+
+\authornote{
+   \addORCIDlink{Joseph A. Bulbulia}{0000-0000-0000-0000}
+
+  Correspondence concerning this article should be addressed to Joseph Bulbulia, School of Psychology, Faculty of Science, Victoria University of Wellington, P.O. 600, Welllington, New Zealand, 6011.
+  E-mail: joseph.bulbulia@vuw.ac.nz}
+
+\begin{document}
+
+\maketitle
+
+\subsection*{The Problem}
+
+Across the world, religion remains a core feature of human life. Given this centrality it is plausible that religion affects mental and physical health.\footnote{We define {\it religion} to mean beliefs and practices that respect supernatural persons or powers}. 
+
+However, inferring how religion affects health requires care. Religion is multi-faceted. So too is health. Which components of religion affect which components of health? We must narrow a focus. 
+
+Second, components of religion and health dynamically affect each other. Religious service attendance may affect religious belief. Loss of belief may reduce attendance. Cancer may cause depression. Religious service may buffer people from depression. Depression may create a demand for religious service. Panel data needed to assess these dynamics are rare.
+
+Third, even where panel data are available, how religion affects health is subject to an interplay of cultural, political, and demographic parameters. None of these contextual parameters can be independently manupulated. The data, alone, cannot resolve causal questions.
+
+\subsection*{}
+
+
+
+
+%\Textcite{van} said this,
+%too \parencite{vand}.\pare  Further evidence comes from
+%other sources \parencite{Shotton1989,Lassen2006}.  \lipsum[3]
+
+\section{Method}
+
+
+\section{Results}
+%Table~\ref{tab:BasicTable} summarizes the data.
+
+%Figure~\ref{fig:Figure1} shows this trend. 
+
+\section{Discussion}
+
+* Need for theory
+* Need for longitudional data
+* Measurement problems, including missing data. 
+
+\section{Acknowledgements}
+\label{app:instrument}
+
+
+
+%\printbibliography
+
+\appendix
+
+
+\section{}
+
+\subsection{Statistical models}
+
+\subsection{Priors}
+\noindent For k = 1\dots 5 ordinal response thresholds, and j = 1\dots 24 countries:
+
+$$
+\begin{align}
+y_{ij}^k \sim \text{Ordered}(\mu_{ij}^k) \nonumber\\
+\text{CumLogit}(\mu_{ij}^k)\sim \boldsymbol{\alpha^k +\beta} \nonumber\\
+\boldsymbol{\alpha^k} \sim \alpha_{0}^k +\alpha_j \nonumber\\
+\alpha_{0}^k \sim \text{StudentT}(3,0,10)\nonumber\\
+%\alpha_j \sim \text{StudentT}^+(3,0,10)\nonumber\\
+\boldsymbol{\beta}\sim \boldsymbol{b} + \beta_j \nonumber\\
+\boldsymbol{b}\sim\text{Normal}(0,1) \nonumber\\
+\begin{bmatrix}
+\alpha_j \\
+\beta_j
+\end{bmatrix}
+\sim 
+\text{MVNormal}
+\begin{pmatrix}
+\begin{bmatrix}
+0\\
+0
+\end{bmatrix}
+,\boldsymbol{S} \nonumber
+\end{pmatrix}\\
+\boldsymbol{S} = 
+\begin{pmatrix}
+\sigma_{\alpha_j} & 0 \\
+0 & \sigma_{\beta_j} \nonumber
+\end{pmatrix} \boldsymbol{R} \begin{pmatrix}
+\sigma_{\alpha_j} & 0 \\
+0 & \sigma_{\beta_j} \nonumber
+\end{pmatrix}\\
+\sigma_{\alpha_j} \sim 
+\text{HalfCauchy}(0,1) \nonumber\\
+\sigma_{\beta_j} \sim 
+\text{HalfCauchy}(0,1) \nonumber\\
+\boldsymbol{R}\sim \text{LKJcorr}(2) \nonumber
+\end{align}
+$$
+
+\newpage
+
+
+\subsection{Tables}
+\label{app:Tables}
+
+\subsection{Simulation}
+\singlespace
+\begin{lstlisting}[language=R]
+set.seed(123)
+n <- 1000
+
+# distressing events (unmeasured)
+U <- rnorm( n ) 
+
+# religious service attendance, increase with distress
+C <- rnorm( n, U ) 
+
+# belief increase with service + distressing events
+B <- rnorm( n , C + U )
+
+# measured distress caused by distress, reduced by church attendance.
+Y <- rnorm( n , U - C ) 
+
+# simulate data
+simdat <- data.frame(
+  Belief = B, # belief
+  ReligiousService = C, # religious service
+  U = U, # distressing events (unmeasured)
+  Y = Y  # outcome
+  )
+# summarise results
+summary(
+  lm(Y ~ Belief + ReligiousService, data = simdat)
+)
+\end{lstlisting}
+
+\begin{table}
+\caption{Simulation reveals how church attendance and belief can deviate where distress increases religious service attendance and belief in God}
+\centering
+\begin{tabular}[t]{lllllllll}
+\toprule
+Parameter & Coefficient & SE & CI & CI\_low & CI\_high & t & df\_error & p\\
+\midrule
+(Intercept) & -0.01 & 0.04 & 0.95 & -0.08 & 0.06 & -0.28 & 997 & 0.78\\
+B & 0.35 & 0.03 & 0.95 & 0.29 & 0.41 & 11.62 & 997 & 0\\
+C & -1.04 & 0.05 & 0.95 & -1.14 & -0.94 & -20.19 & 997 & 0\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

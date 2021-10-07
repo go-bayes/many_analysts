@@ -1,0 +1,49 @@
+This is pdfTeX, Version 3.14159265-2.6-1.40.21 (TeX Live 2020) (preloaded format=pdflatex 2021.2.25)  6 OCT 2021 16:32
+entering extended mode
+ restricted \write18 enabled.
+ %&-line parsing enabled.
+**/Users/jbul176/GIT/many_analysts/draft.tex
+(/Users/jbul176/GIT/many_analysts/draft.tex
+LaTeX2e <2020-10-01> patch level 4
+L3 programming layer <2021-02-18> (/Users/jbul176/Library/TinyTeX/texmf-dist/te
+x/latex/base/article.cls
+Document Class: article 2020/04/10 v1.4m Standard LaTeX document class
+(/Users/jbul176/Library/TinyTeX/texmf-dist/tex/latex/base/size10.clo
+File: size10.clo 2020/04/10 v1.4m Standard LaTeX file (size option)
+)
+\c@part=\count179
+\c@section=\count180
+\c@subsection=\count181
+\c@subsubsection=\count182
+\c@paragraph=\count183
+\c@subparagraph=\count184
+\c@figure=\count185
+\c@table=\count186
+\abovecaptionskip=\skip47
+\belowcaptionskip=\skip48
+\bibindent=\dimen138
+)
+
+! LaTeX Error: File `listings.sty' not found.
+
+Type X to quit or <RETURN> to proceed,
+or enter new name. (Default extension: sty)
+
+Enter file name: 
+! Emergency stop.
+<read *> 
+         
+l.13 \usepackage
+                {booktabs}^^M
+*** (cannot \read from terminal in nonstop modes)
+
+ 
+Here is how much of TeX's memory you used:
+ 221 strings out of 480971
+ 2680 string characters out of 5906949
+ 281182 words of memory out of 5000000
+ 17530 multiletter control sequences out of 15000+600000
+ 403430 words of font info for 27 fonts, out of 8000000 for 9000
+ 14 hyphenation exceptions out of 8191
+ 44i,0n,50p,178b,36s stack positions out of 5000i,500n,10000p,200000b,80000s
+!  ==> Fatal error occurred, no output PDF file produced!

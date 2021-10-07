@@ -210,11 +210,12 @@ d1 <-
 library("ggdag")
 library("dagitty")
 dg1a <- dagify(
-  anx  ~ belief + church +  ses + male + country + U,
+  anx  ~ belief + church + male + country + U,
   belief ~ age + male + country + church + U,
   church ~ age + male + country + U,
   ses ~ country + age + edu,
   edu ~ country + male, 
+  U ~ age + ses + country,
   exposure =  "belief",
   outcome =   "anx",
   latent = "U",
@@ -233,22 +234,24 @@ dg1a <- dagify(
 ) #%>%
  # tidy_dagitty()       
 
-d0a <-ggdag::ggdag(dg1a, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("What if we were to assume distressing events affect religion?")
+d0a <-ggdag::ggdag(dg1a, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("What if we were to assume distressing events increase belief in God?")
 # graph adjustment sets
 
 d1a<-ggdag::ggdag_adjustment_set(dg1a, node_size = 14, text = FALSE, use_labels = "label") +
   theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Then crossectional data could not avoid confounding")
+  theme_dag() + ggtitle("If we assume distressing events increase Religious Belief, 
+Religious Service as well as anxiety, crossectional data cannot avoid confounding ")
 
 d1a
 
 
 dg1 <- dagify(
-  anx  ~ belief + church +  ses + male + country + U,
-  belief ~ age + male + country + church,
-  church ~ age + male + country,
+  anx  ~ belief + church + male + country + U,
+  belief ~ age + male + country + church + U,
+  church ~ age + male + country + U,
   ses ~ country + age + edu,
   edu ~ country + male, 
+  U ~ age + ses + country,
   exposure =  "belief",
   outcome =   "anx",
   latent = "U",
@@ -264,17 +267,19 @@ dg1 <- dagify(
     "U" = "Unmeasured
     distressing life events"
   )
-) #%>%
+) #%>%#%>%
  # tidy_dagitty()       
-
+# 
 dp0 <-ggdag::ggdag(dg1, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("Assumed Causal Relations")
-# graph adjustment sets
 
-dp1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = "label") +
-  theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment sets for Belief in God")
-
+dp0
+# # graph adjustment sets
+# 
+#dp1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = "label") +
+#   theme(legend.position = "bottom") +
+#   theme_dag() + ggtitle("Adjustment sets for Belief in God")
 #dp1
+dp0
 ```
 
 
@@ -295,11 +300,12 @@ We condition on the following model:
 ```{r}
 library("ggdag")
 dg2 <- dagify(
-  anx  ~ belief + church +  ses + male + country,
+  anx  ~ belief + church + male + country + U,
   belief ~ age + male + country + church + U,
   church ~ age + male + country,
   ses ~ country + age + edu,
   edu ~ country + male, 
+  U ~ age + ses + country,
   exposure =  "church",
   outcome =   "anx",
   latent = "U",
@@ -324,9 +330,48 @@ ggdag::ggdag(dg2, text = FALSE, use_labels = "label")  + theme_dag()
 # graph adjustment sets
 dp2<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
   theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment set for Religious Service")
+  theme_dag() + ggtitle("Adjustment set for Religious Service
+assuming service does not change from distress")
 
-#dp2
+dp2
+
+
+dpz <- dagify(
+  anx  ~ belief + church + male + country + U,
+  belief ~ age + male + country + church,
+  church ~ age + male + country,
+  ses ~ country + age + edu,
+  edu ~ country + male, 
+  U ~ age + ses + country,
+  exposure =  "belief",
+  outcome =   "anx",
+  latent = "U",
+  labels = c(
+    "belief" = "belief God",
+    "church" = "religious service attendance",
+    "anx" = "anxiety",
+    "edu" = "education",
+    "ses" = "SES",
+    "male" = "male",
+    "country" = "country",
+    "age" = "age",
+    "U" = "Unmeasured
+    distressing life events"
+  )
+) %>%
+  tidy_dagitty()  
+
+ggdag::ggdag(dgz) + theme_dag()
+
+
+# graph adjustment sets
+dg1<-ggdag::ggdag_adjustment_set(dg1z, node_size = 14, text = FALSE, use_labels = "label") +
+  theme(legend.position = "bottom") +
+  theme_dag() + ggtitle("Adjustment set for Religious Belief
+assuming belief does not change from distress")
+
+dg1
+
 ```
 
 
@@ -335,9 +380,25 @@ Graph for paper
 
 ```{r}
 library(patchwork)
-( (dp0)/(dp1 + dp2) +   plot_layout(guides = 'collect'))  +((d0a) + (d1a)) + plot_annotation(title = 'If distressing life events affect religious belief and behaviour, longtidinal data are needed for causal inference', tag_levels = "a")
-# 14/12
+ (dp0 + d1a)/   (dg1 + dp2)  +   plot_layout(guides = 'collect')  + plot_annotation(title = 'If distressing life events affect religious belief and behaviour, longtidinal data are needed for causal inference', tag_levels = "a") 
+# dag_ful 15/15
 ```
+
+
+
+## correlation
+
+```{r}
+correlation::correlation(d1, select = "ch_s",select2 = "bg_s")
+
+correlation::correlation(d1, select = "bg_s",select2 = "anx")
+
+correlation::correlation(d1, select = "ch_s",select2 = "anx")
+
+
+```
+
+
 
 ```{r}
 library(lme4)

@@ -898,6 +898,7 @@ m4<- brm(
 parameters::model_parameters(m4, test = "p_direction")
 brms::ranef(m4)
 
+
 parameters::parameters(
   m4,
   test = "pd",
@@ -1185,7 +1186,7 @@ sum(tout$p.value <.001) / length(tout$p.value)
 
 
 
-## Simulation tables 
+˝## Simulation tables 
 
 ```{r}
 parameters::parameters(

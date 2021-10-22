@@ -1055,12 +1055,6 @@ Church attendance positively predicts lower anxiety.
 
 There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. India is an outlier.
 
-
-
-
-
-
-
 ## Simulation
 
 

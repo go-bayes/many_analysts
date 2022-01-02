@@ -24,14 +24,13 @@ knitr::opts_chunk$set(#
   collapse =TRUE,
   echo=TRUE, 
   #results="hide", 
-  fig.width= 10,
-  fig.height=10,
-  tidy = "styler")
+  fig.width= 16,
+  fig.height= 9)
 ```
 
 ```{r runanalysis, echo=FALSE, include = FALSE}
-source("libs.R") # libraries 
-source("funs.R") # custom functions
+#source("libs.R") # libraries 
+# source("funs.R") # custom functions
 
 # libraries
 # libraries and settings
@@ -73,6 +72,8 @@ library("tidybayes")
 library("bayesplot")
 library("dagitty")
 library("ggdag")
+library("geepack")  # marginal structural models
+library("ipw") # inverse probability weighting. 
 rstan_options(auto_write=TRUE)
 options(mc.cores=parallel::detectCores ())
 theme_set(theme_few())
@@ -473,7 +474,7 @@ library(patchwork)
 ```
 
 
-## correlation
+### correlation
 
 ```{r}
 correlation::correlation(d1, select = "ch_s",select2 = "bg_s")
@@ -481,7 +482,6 @@ correlation::correlation(d1, select = "ch_s",select2 = "bg_s")
 correlation::correlation(d1, select = "bg_s",select2 = "anx")
 
 correlation::correlation(d1, select = "ch_s",select2 = "anx")
-
 
 ```
 
@@ -496,48 +496,176 @@ library(lme4)
 
 
 
-Graph for confounding
+### Check LMER Results
 
 ```{r}
 library(patchwork)
-m0 <- lmer(
+mlmerCH <- lmer(
     anx ~
-    bg_s +
-  #  ch_s +
+    #bg_s +
+    ch_s +
     age_s  +
     male +
-    ( bg_s | country), 
+    ( 1 + ch_s | country), 
   data = d1)
 
 
-sjPlot::tab_model(m0)
+sjPlot::tab_model(mlmerCH)
 
-m0 <- brm(
-  anx ~
+
+mlmerBG <- lmer(
+    anx ~
     bg_s +
-    #ch_s +
+    ch_s +
     age_s  +
     male +
-    (1 + bg_s | country),
-  data = d1,
-  family = cumulative(link = "logit"),
-  seed = 1234,
-  warmup = 1000,
-  iter = 3000,
-  chains = 4,
-  file = here::here("models", "m2o_real")
-)
+    ( 1 + bg_s | country), 
+  data = d1)
 
+
+sjPlot::tab_model(mlmerBG)
 ```
 
 
+## General Estimating Equations
+
+
+### IPW Anxiety ~ Belief 
+
+```{r}
+library("ipw")
+
+d1ipwB <- ipw::ipwpoint(
+  exposure = bg_s,
+  family = "gaussian",
+  numerator = ~ 1,
+  denominator = ~  ch_s + age_s  + male + country,
+  data = as.data.frame(d1)
+)
+
+
+summary(d1ipwB$ipw.weights)
+sum(d1ipwB$ipw.weights > 10)
+
+
+d1pB <- d1 %>% 
+  mutate(ipw = d1ipwB$ipw.weights) %>%
+  filter(ipw < 10)
+```
+
+
+Model:
+
+
+```{r}
+mgeeB  <- geeglm(
+  anx ~
+    bg_s,# + # already weighted
+   # ch_s +
+   # age_s  +
+   # male,
+  data = d1pB,
+  id = country,
+  weights = ipw
+)
+
+
+parameters::model_parameters(mgeeB) %>%
+  print_html()
+
+library(ggeffects)
+p0BG <- plot(ggeffects::ggemmeans(mgeeB, terms = "bg_s [all]"), add.data = TRUE, dot.alpha = 0.1)    # 
+p0BG 
+```
+
+
+
+### IPW Anxiety ~ Church 
+
+First we create Inverse Probability Weights
+
+```{r}
+library("ipw")
+
+d1ipw <- ipw::ipwpoint(
+  exposure = ch_s,
+  family = "gaussian",
+  numerator = ~ 1,
+  denominator = ~  age_s  + male + country,
+  data = as.data.frame(d1)
+)
+
+
+summary(d1ipw$ipw.weights)
+sum(d1ipw$ipw.weights > 10)
+
+
+d1p <- d1 %>% 
+  mutate(ipw = d1ipw$ipw.weights)
+```
+
+
+
+Model
+
+
+```{r}
+mgeeCH <- geeglm(
+  anx ~
+    ch_s,# + # already weighted
+    #age_s  +
+  #  male,
+  data = d1p,
+  id = country,
+  weights = ipw
+)
+
+
+parameters::model_parameters(mgeeCH) %>%
+  print_html()
+
+library(ggeffects)
+pmgeeCH <- plot(ggeffects::ggemmeans(mgeeCH, terms = "ch_s [all]"), add.data = TRUE, dot.alpha = 0.1)    # 
+pmgeeCH
+```
+
+
+Model with with trimmed IPW (as recommended to avoid leverage from rare cases). Note, the result here is the same.  
+
+
+```{r, eval = FALSE}
+
+
+# trim IPW to less than 10 
+d1pf <- d1 %>% 
+  mutate(ipw = d1ipw$ipw.weights) %>%
+  filter(ipw < 10)
+
+m0f <- geeglm(
+  anx ~
+    ch_s,# +
+    #age_s  +
+  #  male,
+  data = d1pf,
+  id = country,
+  weights = ipw
+)
+
+parameters::model_parameters(m0f) %>%
+  print_html()
+
+library(ggeffects)
+p0f <- plot(ggeffects::ggemmeans(m0f, terms = "ch_s [all]"), add.data = TRUE, dot.alpha = 0.1)    # 
+p0f
+```
 
 ## Results summary Anxiety ~ Belief
 
 
 ###  Model
+
 ```{r}
-m1 <- brm(
+m1 <- brm( 
   anx ~
     bg_s +
     ch_s +

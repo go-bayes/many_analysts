@@ -26,12 +26,13 @@ knitr::opts_chunk$set(#
   #results="hide", 
   fig.width= 16,
   fig.height= 9)
+
+
 ```
 
 ```{r runanalysis, echo=FALSE, include = FALSE}
-#source("libs.R") # libraries 
+# source("libs.R") # libraries 
 # source("funs.R") # custom functions
-
 # libraries
 # libraries and settings
 library("tidyverse")
@@ -65,7 +66,6 @@ library("here")
 #library("ggstatsplot")
 library("ggthemes")
 library("ggdag")
-#library("papaja")
 library("rstan")
 library("brms")
 library("tidybayes")

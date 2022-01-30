@@ -76,7 +76,7 @@ library("geepack")  # marginal structural models
 library("ipw") # inverse probability weighting. 
 rstan_options(auto_write=TRUE)
 options(mc.cores=parallel::detectCores ())
-theme_set(theme_few())
+theme_set(theme_few())]
 ```
 
 

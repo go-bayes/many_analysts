@@ -8,6 +8,8 @@ author:
     affiliation_url: https://www.wgtn.ac.nz
     orcid_id: 0000-0002-5861-2056
 date: 2021-APRIL-29 
+bibliography: references.bib
+link-citations: true
 output:
   distill::distill_article:
     self_contained: true
@@ -76,13 +78,12 @@ library("geepack")  # marginal structural models
 library("ipw") # inverse probability weighting. 
 rstan_options(auto_write=TRUE)
 options(mc.cores=parallel::detectCores ())
-theme_set(theme_few())]
+theme_set(theme_few())
 ```
-
 
 ## Workflow and analysis
 
-First, we import the data (see functions).
+First, we import the data (see functions). [@tchetgen2012]
 
 ```{r}
 # import data
@@ -156,7 +157,6 @@ df <- d %>%
 
 
 ```
-
 
 ```{r}
 # get data into shape
@@ -243,7 +243,7 @@ d1a<-ggdag::ggdag_adjustment_set(dg1a, node_size = 14, text = FALSE, use_labels 
   theme(legend.position = "bottom") +
   theme_dag() + ggtitle("If we assume distressing events affect belief and service we cannot estimate causal effects ")
 
-d1a
+d1a 
 
 
 dg1 <- dagify(
@@ -283,20 +283,17 @@ dp0
 dp0
 ```
 
-
 ## Causal model: religious service
 
 We condition on the following model:
 
 -   religion + ses + male + country + a different unmeasured latent variable1 (e.g. privilege) affects distress.
 
--   age + male + country + and unmeasured latent variable2 (e.g. parent's religion, call this U1) affects Religion 
+-   age + male + country + and unmeasured latent variable2 (e.g. parent's religion, call this U1) affects Religion
 
 -   country + age + an unmeasured latent variable1 causes ses (citations...)
 
 -   our "exposure" is religious service attendance or religious belief and our outcome is "anxiety"
-
-
 
 ```{r}
 library("ggdag")
@@ -376,9 +373,7 @@ dg1
 
 ```
 
-
-Graph for paper 
-
+Graph for paper
 
 ## Anxiety causes belief DAG
 
@@ -419,8 +414,6 @@ dl2
 
 
 ```
-
-
 
 ## Anxiety causes church DAG
 
@@ -464,15 +457,13 @@ dl2C
 
 ```
 
-
-## Dag graph 
+## Dag graph
 
 ```{r}
 library(patchwork)
  (dp0 + d1a)/   (nocause + dg1 + dp2)  /(dl1 + dl2 + dl2C)+   plot_layout(guides = 'collect')  + plot_annotation(title = 'Three causal models', tag_levels = "a") 
 # dag_ful 20/20
 ```
-
 
 ### correlation
 
@@ -485,16 +476,11 @@ correlation::correlation(d1, select = "ch_s",select2 = "anx")
 
 ```
 
-
-
 ```{r}
 library(lme4)
 
 
 ```
-
-
-
 
 ### Check LMER Results
 
@@ -526,11 +512,9 @@ mlmerBG <- lmer(
 sjPlot::tab_model(mlmerBG)
 ```
 
-
 ## General Estimating Equations
 
-
-### IPW Anxiety ~ Belief 
+### IPW Anxiety \~ Belief
 
 ```{r}
 library("ipw")
@@ -553,9 +537,7 @@ d1pB <- d1 %>%
   filter(ipw < 10)
 ```
 
-
 Model:
-
 
 ```{r}
 mgeeB  <- geeglm(
@@ -578,9 +560,7 @@ p0BG <- plot(ggeffects::ggemmeans(mgeeB, terms = "bg_s [all]"), add.data = TRUE,
 p0BG 
 ```
 
-
-
-### IPW Anxiety ~ Church 
+### IPW Anxiety \~ Church
 
 First we create Inverse Probability Weights
 
@@ -604,10 +584,7 @@ d1p <- d1 %>%
   mutate(ipw = d1ipw$ipw.weights)
 ```
 
-
-
 Model
-
 
 ```{r}
 mgeeCH <- geeglm(
@@ -629,9 +606,7 @@ pmgeeCH <- plot(ggeffects::ggemmeans(mgeeCH, terms = "ch_s [all]"), add.data = T
 pmgeeCH
 ```
 
-
-Model with with trimmed IPW (as recommended to avoid leverage from rare cases). Note, the result here is the same.  
-
+Model with with trimmed IPW (as recommended to avoid leverage from rare cases). Note, the result here is the same.
 
 ```{r, eval = FALSE}
 
@@ -659,10 +634,9 @@ p0f <- plot(ggeffects::ggemmeans(m0f, terms = "ch_s [all]"), add.data = TRUE, do
 p0f
 ```
 
-## Results summary Anxiety ~ Belief
+## Results summary Anxiety \~ Belief
 
-
-###  Model
+### Model
 
 ```{r}
 m1 <- brm( 
@@ -701,8 +675,6 @@ parameters::parameters(
 
 ```
 
-
-
 Coefficient plots
 
 Believe in God predicts more anxiety
@@ -713,9 +685,9 @@ parF1
 plot(parF1,  sort = TRUE) +theme_lucid() #option -->
 ```
 
-Variability in country intercepts, slope interactions not reliable. 
+Variability in country intercepts, slope interactions not reliable.
 
-India, however, is clearly an outlier. 
+India, however, is clearly an outlier.
 
 ```{r}
 parR1<-parameters::model_parameters(m1,effects = "random" ) 
@@ -724,9 +696,7 @@ are not reliable: India is an outlier.")
 belief_random
 ```
 
-No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s)  0.24  [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model. 
-
-
+No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s) 0.24 [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model.
 
 ```{r}
 plot(ggeffects::ggpredict(
@@ -737,7 +707,6 @@ plot(ggeffects::ggpredict(
 )) + scale_color_viridis_d() +  scale_y_continuous(limits = c(0,1)) + 
   theme_bw()
 ```
-
 
 Clear relationship between lower distress and greater religious service attendance
 
@@ -755,7 +724,6 @@ belief_fixed <- plot(p0, plot = FALSE)[[1]]   +  xlab("belief (standardised)") +
 belief_fixed
 ```
 
-
 ### Checks:
 
 ```{r}
@@ -770,9 +738,9 @@ mcmc_plot(m1,
           type = "trace")
 ```
 
-## Results summary: Anxiety ~ church
+## Results summary: Anxiety \~ church
 
-Does church attendance predict anxiety? 
+Does church attendance predict anxiety?
 
 ### Model
 
@@ -806,9 +774,6 @@ parameters::parameters(
     print()
 ```
 
-
-
-
 ### Results
 
 Coefficient plots
@@ -820,9 +785,9 @@ parc<-parameters::model_parameters(m2 )
 plot(parc,  sort = TRUE) + theme_lucid() #option -->
 ```
 
-Variability in country intercepts, slope interactions not reliable. 
+Variability in country intercepts, slope interactions not reliable.
 
-India, however, is clearly an outlier. 
+India, however, is clearly an outlier.
 
 ```{r}
 parcR<-parameters::model_parameters(m2,effects = "random" ) 
@@ -832,9 +797,7 @@ are not reliable: India is again an outlier.")
 church_random
 ```
 
-No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s)  0.24  [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model. 
-
-
+No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s) 0.24 [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model.
 
 ```{r}
 plot(ggeffects::ggpredict(
@@ -845,7 +808,6 @@ plot(ggeffects::ggpredict(
 )) + scale_color_viridis_d() + 
   theme_classic()
 ```
-
 
 Clear relationship between lower distress and greater religious service attendance
 
@@ -865,11 +827,7 @@ church_fixed <-plot(p0b, plot = FALSE)[[1]]  + xlab("religious service attendanc
 church_fixed
 ```
 
-
-
-
-## Results summary Belief ~ Anxiety
-
+## Results summary Belief \~ Anxiety
 
 ```{r}
 m3<- brm(
@@ -904,35 +862,51 @@ parameters::parameters(
     print()
 ```
 
-
-
-
-
 <!-- ```{r} -->
+
 <!-- this is no better -->
+
 <!-- m3a<- brm( -->
+
 <!--   bg_s ~ -->
+
 <!--     anx_s+ -->
+
 <!--     ch_s + -->
+
 <!--     age_s  + -->
+
 <!--     male + -->
+
 <!--     (1 + anx_s | country), -->
+
 <!--   data = d1, -->
+
 <!--   seed = 1234, -->
+
 <!--   warmup = 1000, -->
+
 <!--   iter = 3000, -->
+
 <!--   chains = 4, -->
+
 <!--   file = here::here("models", "m3a") -->
+
 <!-- ) -->
 
 <!-- parameters::model_parameters(m3a, test = "p_direction") -->
-<!-- brms::ranef(m3a) -->
-<!-- summary(m3a) -->
-<!-- hist(d1$bg_s) -->
-<!-- # YES -->
-<!-- pp_check(m3a) -->
-<!-- ``` -->
 
+<!-- brms::ranef(m3a) -->
+
+<!-- summary(m3a) -->
+
+<!-- hist(d1$bg_s) -->
+
+<!-- # YES -->
+
+<!-- pp_check(m3a) -->
+
+<!-- ``` -->
 
 Coefficient plots
 
@@ -944,9 +918,9 @@ parF3
 plot(parF3,  sort = TRUE) +theme_lucid() #option -->
 ```
 
-Variability in country intercepts, slope interactions not reliable. 
+Variability in country intercepts, slope interactions not reliable.
 
-India, however, is clearly an outlier. 
+India, however, is clearly an outlier.
 
 ```{r}
 parR3<-parameters::model_parameters(m3,effects = "random" ) 
@@ -957,9 +931,7 @@ are not reliable.")
 anx_belief_random
 ```
 
-No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s)  0.24  [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model. 
-
-
+No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s) 0.24 [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model.
 
 ```{r}
 plot(ggeffects::ggpredict(
@@ -970,8 +942,6 @@ plot(ggeffects::ggpredict(
 )) + scale_color_viridis_d() +  scale_y_continuous(limits = c(0,1)) + 
   theme_bw()
 ```
-
-
 
 ```{r, cache = TRUE}
 library(viridis)
@@ -989,7 +959,6 @@ belief_anxiety_random_fixed <- plot(p3, plot = FALSE)[[1]]   + xlab("Anxiety (mo
 belief_anxiety_random_fixed
 ```
 
-
 ### Checks:
 
 ```{r}
@@ -1004,9 +973,7 @@ mcmc_plot(m3,
           type = "trace")
 ```
 
-
-## Results summary Church ~ Anxiety
-
+## Results summary Church \~ Anxiety
 
 ```{r}
 m4<- brm(
@@ -1041,35 +1008,51 @@ parameters::parameters(
     print()
 ```
 
-
-
-
-
 <!-- ```{r} -->
+
 <!-- this is no better -->
+
 <!-- m3a<- brm( -->
+
 <!--   bg_s ~ -->
+
 <!--     anx_s+ -->
+
 <!--     ch_s + -->
+
 <!--     age_s  + -->
+
 <!--     male + -->
+
 <!--     (1 + anx_s | country), -->
+
 <!--   data = d1, -->
+
 <!--   seed = 1234, -->
+
 <!--   warmup = 1000, -->
+
 <!--   iter = 3000, -->
+
 <!--   chains = 4, -->
+
 <!--   file = here::here("models", "m3a") -->
+
 <!-- ) -->
 
 <!-- parameters::model_parameters(m3a, test = "p_direction") -->
-<!-- brms::ranef(m3a) -->
-<!-- summary(m3a) -->
-<!-- hist(d1$bg_s) -->
-<!-- # YES -->
-<!-- pp_check(m3a) -->
-<!-- ``` -->
 
+<!-- brms::ranef(m3a) -->
+
+<!-- summary(m3a) -->
+
+<!-- hist(d1$bg_s) -->
+
+<!-- # YES -->
+
+<!-- pp_check(m3a) -->
+
+<!-- ``` -->
 
 Coefficient plots
 
@@ -1081,9 +1064,9 @@ parF4
 plot(parF4,  sort = TRUE) +theme_lucid() #option -->
 ```
 
-Variability in country intercepts, slope interactions not reliable. 
+Variability in country intercepts, slope interactions not reliable.
 
-India, however, is clearly an outlier. 
+India, however, is clearly an outlier.
 
 ```{r}
 par4<-parameters::model_parameters(m4,effects = "random" ) 
@@ -1094,8 +1077,6 @@ are not reliable.")
 anx_church_random
 ```
 
-
-
 ```{r}
 plot(ggeffects::ggpredict(
   m4,
@@ -1105,8 +1086,6 @@ plot(ggeffects::ggpredict(
 )) + scale_color_viridis_d() +  scale_y_continuous(limits = c(0,1)) + 
   theme_bw()
 ```
-
-
 
 ```{r, cache = TRUE}
 library(viridis)
@@ -1124,7 +1103,6 @@ church_anxiety_random_fixed <- plot(p4, plot = FALSE)[[1]]   + xlab("Anxiety (mo
 church_anxiety_random_fixed
 ```
 
-
 ### Checks:
 
 ```{r}
@@ -1139,9 +1117,6 @@ mcmc_plot(m4,
           type = "trace")
 ```
 
-
-
-
 ## Combined plot
 
 ```{r}
@@ -1153,8 +1128,6 @@ library(patchwork)
 
 # coef_graph 15 x 25
 ```
-
-
 
 ### Checks:
 
@@ -1170,22 +1143,17 @@ mcmc_plot(m2,
           type = "trace")
 ```
 
-
-
 ### Overall summary
 
 Belief in God predicts anxiety. This is consistent with theories that anxiety leads to greater demand for belif in God. However, this question awaits future research.
 
-
-Church attendance positively predicts lower anxiety. 
+Church attendance positively predicts lower anxiety.
 
 ### Group level-predictions
 
 There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. India is an outlier.
 
 ## Simulation
-
-
 
 ```{r}
 set.seed(123)
@@ -1252,7 +1220,6 @@ library(patchwork)
 
 ```
 
-
 We can convince ourselves of this result by replicating it many times
 
 ```{r}
@@ -1306,9 +1273,7 @@ sum(tout$estimate < 0) / length(tout$estimate)
 sum(tout$p.value <.001) / length(tout$p.value)
 ```
 
-
-
-˝## Simulation tables 
+˝#\# Simulation tables
 
 ```{r}
 parameters::parameters(
@@ -1356,13 +1321,7 @@ parameters::parameters(
     print()
 ```
 
-
-
-
-
-
 ## DETAILS OF ANLAYSIS FOR REPLICATION
-
 
 ## Workflow and analysis
 
@@ -1593,45 +1552,66 @@ Next, a quick run of correlations. Note that we need the to model the country le
 
 <!-- Religion correlations -->
 
-
 <!-- ```{r, cache = TRUE} -->
+
 <!-- rel %>% -->
+
 <!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+
 <!--   plot() + theme_blackboard() -->
+
 <!-- ``` -->
 
 <!-- General well-being correlations -->
 
 <!-- ```{r cache = TRUE} -->
+
 <!-- wbgen %>% -->
+
 <!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+
 <!--   plot() + theme_blackboard() -->
+
 <!-- ``` -->
 
 <!-- Physical well-being correlations -->
 
 <!-- ```{r} -->
+
 <!-- wbphys %>% -->
+
 <!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+
 <!--   summary() -->
 
 <!-- wbphys %>% -->
+
 <!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+
 <!--   plot() + theme_blackboard() -->
+
 <!-- ``` -->
 
 <!-- Psychological well-being correlations -->
 
 <!-- ```{r} -->
+
 <!-- wbpsych %>% -->
+
 <!--   select(-wb_psychMEANING)%>% -->
+
 <!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+
 <!--   summary() -->
 
 <!-- wbpsych %>% -->
+
 <!--   select(-wb_psychMEANING)%>% -->
+
 <!--   correlation( partial = FALSE, multilevel = TRUE ) %>% -->
+
 <!--   plot()  + theme_abyss() -->
+
 <!-- ``` -->
 
 #### The statistical model
@@ -2301,7 +2281,6 @@ Lets consider the non-trivial theory that belief in God (bg) affects psychologic
 
 We begin by drawing the dag.
 
-
 And again, we face a collider bias. Our causal model shows us that if we were to include our meaning-making indicator in our statistical we will compromise inference!
 
 ```{r}
@@ -2310,7 +2289,6 @@ ggdag::ggdag_collider(dg1,
                       to = "wb",
                       controlling_for(c("male", "support", "country", "age")))
 ```
-
 
 We find weak effect for belief in God. No correlation of intercept and slope but India is an outlier.
 
@@ -2365,7 +2343,6 @@ Summary:
 par<-parameters::model_parameters(m2,effects = "random" ) 
 plot(par,  sort = TRUE) +theme_lucid()
 ```
-
 
 <!-- ```{r cache = TRUE} -->
 
@@ -2615,29 +2592,29 @@ plot(p0,
 
 5.  Develop discussion about model assumptions and limitations, such as
 
-  -   Is the DAG we use here sensible?
+-   Is the DAG we use here sensible?
 
-  -   Measurement equivalence?
+-   Measurement equivalence?
 
-  -   India???
+-   India???
 
-  -   Demand characteristics and heterogeneous populations.
+-   Demand characteristics and heterogeneous populations.
 
-  -   Is the theory that religion causes well-being biologically sensible? Why I don't think so...
+-   Is the theory that religion causes well-being biologically sensible? Why I don't think so...
 
-  -   Connect with the literature.
+-   Connect with the literature.
 
-  -   Better describe potential for Simpson's paradoxes: country level data collection is likely to give the wrong inference about religion and well being!
+-   Better describe potential for Simpson's paradoxes: country level data collection is likely to give the wrong inference about religion and well being!
 
-  -   Note that sociological-level data is what evolutionary scholars are collecting now -- and that such data do not clarify individual-level psychological processes. For individual-level processes we need to measure at the individual level.
+-   Note that sociological-level data is what evolutionary scholars are collecting now -- and that such data do not clarify individual-level psychological processes. For individual-level processes we need to measure at the individual level.
 
-  -   Make the plug for longitudinal data: we have no understanding of demand characteristics. We get no real inference from the model here because our data are too limited.
+-   Make the plug for longitudinal data: we have no understanding of demand characteristics. We get no real inference from the model here because our data are too limited.
 
-  -   Make a plug for DAGs, clarify how much trouble we can get into without an explicit causal model.
+-   Make a plug for DAGs, clarify how much trouble we can get into without an explicit causal model.
 
 To be continued...
 
-## Summary 
+## Summary
 
 ### Individual-level predictions
 

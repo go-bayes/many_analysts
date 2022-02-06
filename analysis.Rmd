@@ -60,7 +60,7 @@ library("patchwork")
 library("texreg")
 library("viridisLite")
 library("patchwork")
-library("here")n
+library("here")
 #library("rethinking")
 #library("statsExpressions")
 #library("ggstatsplot")
@@ -363,7 +363,7 @@ ggdag::ggdag(dpz) + theme_dag()
 # graph adjustment sets
 dg1<-ggdag::ggdag_adjustment_set(dpz, node_size = 14, text = FALSE, use_labels = "label") +
   theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment set for Religious Belief
+  theme_dag() + ggtitle("Adjustment set for religious belief
 assuming belief does not change from distress")
 
 dg1

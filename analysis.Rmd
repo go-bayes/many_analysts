@@ -294,7 +294,7 @@ We condition on the following model:
 
 ```{r}
 library("ggdag")
-dg2 <- dagify(
+dg2 <- dagify( 
   anx  ~ belief + church + male + country + U,
   belief ~ age + male + country + church,
   church ~ age + male + country,
@@ -321,16 +321,15 @@ dg2 <- dagify(
 
 ggdag::ggdag(dg2) + theme_dag()
 
-nocause <- ggdag::ggdag(dg2, text = FALSE, use_labels = "label")  + theme_dag() + labs(title = "Assume unmeasured distressing experience
-does not affect Belief or Service")
+nocause <- ggdag::ggdag(dg2, text = FALSE, use_labels = "label")  + theme_dag() + labs(title = "Assume unmeasured distressing experience does not affect Belief or Service")
 nocause
 
-dp2<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
+dg0<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
   theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment set for Religious Service
+  theme_dag() + ggtitle("Adjustment set for religious service
 assuming service does not change from distress")
 
-dp2
+dp0
 
 
 dpz <- dagify(
@@ -367,8 +366,45 @@ dg1<-ggdag::ggdag_adjustment_set(dpz, node_size = 14, text = FALSE, use_labels =
 assuming belief does not change from distress")
 
 dg1
+```
+
+Save image
+
+```{r dg1, eval=FALSE}
+# save graph
+ggsave(
+  dg1,
+  path = here::here("Figs"),
+  width = 10,
+  height = 5,
+  units = "in",
+  filename = "dag_belief.jpg",
+  device = 'jpeg',
+  limitsize = FALSE,
+  dpi = 1200
+)
 
 ```
+
+
+```{r dp0, eval=FALSE}
+# save graph
+ggsave(
+  dg1,
+  path = here::here("Figs"),
+  width = 10,
+  height = 5,
+  units = "in",
+  filename = "dag_church.jpg",
+  device = 'jpeg',
+  limitsize = FALSE,
+  dpi = 1200
+)
+
+```
+
+
+
 
 Graph for paper
 
@@ -406,7 +442,7 @@ dl1
 
 dl2<-ggdag::ggdag_adjustment_set(dpL, node_size = 14, text = FALSE, use_labels = "label") +
   theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment set for Anxiety causing Belief in God")
+  theme_dag() + ggtitle("Adjustment set assuming anxiety causes belief in God")
 dl2
 
 

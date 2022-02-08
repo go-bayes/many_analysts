@@ -16,6 +16,8 @@ output:
     toc: true
     code_folding: true
     highlight: kate
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r global_options, echo=FALSE, include = FALSE}
@@ -33,8 +35,6 @@ knitr::opts_chunk$set(#
 ```{r runanalysis, echo=FALSE, include = FALSE}
 # source("libs.R") # libraries 
 # source("funs.R") # custom functions
-# libraries
-# libraries and settings
 library("tidyverse")
 library("easystats")
 library("ggplot2") #plots
@@ -74,6 +74,7 @@ library("dagitty")
 library("ggdag")
 library("geepack")  # marginal structural models
 library("ipw") # inverse probability weighting. 
+library("WeightIt")# inverse probability weighting. 
 rstan_options(auto_write=TRUE)
 options(mc.cores=parallel::detectCores ())
 theme_set(theme_few())
@@ -93,7 +94,6 @@ d <- as.data.frame(
 
 ```{r cache = TRUE}
 # clean data:use informative names !
-
 # note from Suzanne: 
 # I do think it's actually a negative relation, as the anxiety item was reverse-coded (following the documentation from the WHO quality of life scale, from which the items were taken). This is indicated in the data documentation, but I can totally understand this got buried under all information that was provided. We tried to make the dataset as clean as possible since most teams just aggregated all well-being items (and the religiosity items). But in retrospect, this recoding did cause some confusion for a couple of teams that used only specific items (and prefered the ordinal scale). This is definitely something to take into account for future projects like this one. 
 
@@ -263,9 +263,23 @@ dg1 <- dagify(
     "country" = "country",
     "age" = "age",
     "U" = "Unmeasured
-    distressing life events"
-  )
-) #%>%#%>%
+    distressing life events",
+    coords = list(x = c(anx =6 , 
+                        belief = 5, 
+                        church = 4, 
+                        ses = 3,
+                        male = 2, 
+                        age = 2,
+                        country = 2,
+                        U = 1),
+                  y = c(anx = 2, 
+                        belief = 2, 
+                        church = 2, 
+                        ses = 2,
+                        male = 2, 
+                        age = 2,
+                        country = 1,
+                        U = 1)) #%>%#%>%
  # tidy_dagitty()       
 # 
 dp0 <-ggdag::ggdag(dg1, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("Assumed unmeasured causal effects of distressing experiences")
@@ -547,9 +561,35 @@ sjPlot::tab_model(mlmerBG)
 
 ### IPW Anxiety \~ Belief
 
+
+First check for imbalance using the cobolt package. 
+
+```{r}
+# CHECK BALANCE
+# test
+cobalt::bal.tab(bg_s ~ age_s  + male + country,
+        data = d1, estimand = "ATE", m.threshold = .05)
+```
+
+
+Get inverse probability weights 
+
+```{r}
+w_out_bs <- weightit(bg_s ~ age_s  +ch_s +  male + country,
+        data = d1, estimand = "ATE", method = "ebal", stabilize = TRUE)
+w_out_bs
+
+summary(w_out_bs)
+sum(w_out_bs$weights)
+
+cobalt::bal.tab(w_out_bs, m.threshold = .05, disp.v.ratio = TRUE)
+```
+
+
+
+
 ```{r}
 library("ipw")
-
 d1ipwB <- ipw::ipwpoint(
   exposure = bg_s,
   family = "gaussian",
@@ -560,12 +600,14 @@ d1ipwB <- ipw::ipwpoint(
 
 
 summary(d1ipwB$ipw.weights)
-sum(d1ipwB$ipw.weights > 10)
+sum(d1ipwB$ipw.weights >= 10)
 
 
 d1pB <- d1 %>% 
-  mutate(ipw = d1ipwB$ipw.weights) %>%
-  filter(ipw < 10)
+  mutate(ipw = w_out_bs$weights) %>%
+  filter(d1ipwB$ipw.weights < 10)
+
+
 ```
 
 Model:
@@ -573,15 +615,16 @@ Model:
 ```{r}
 mgeeB  <- geeglm(
   anx ~
-    bg_s,# + # already weighted
+    bg_s,# already weighted
    # ch_s +
    # age_s  +
    # male,
   data = d1pB,
   id = country,
+  corstr = "exchangeable",
   weights = ipw
 )
-
+mgeeB
 
 parameters::model_parameters(mgeeB) %>%
   print_html()
@@ -612,7 +655,8 @@ sum(d1ipw$ipw.weights > 10)
 
 
 d1p <- d1 %>% 
-  mutate(ipw = d1ipw$ipw.weights)
+  mutate(ipw = d1ipw$ipw.weights) %>%
+  filter(ipw < 10)
 ```
 
 Model
@@ -640,8 +684,6 @@ pmgeeCH
 Model with with trimmed IPW (as recommended to avoid leverage from rare cases). Note, the result here is the same.
 
 ```{r, eval = FALSE}
-
-
 # trim IPW to less than 10 
 d1pf <- d1 %>% 
   mutate(ipw = d1ipw$ipw.weights) %>%
@@ -688,8 +730,6 @@ m1 <- brm(
 
 parameters::model_parameters(m1, test = "p_direction")
 brms::ranef(m1)
-
-
 
 parameters::parameters(
   m1,
@@ -746,7 +786,7 @@ library(viridis)
 p0<-brms::conditional_effects(m1, "bg_s", 
                               spaghetti = T,
                               ndraws = 500,
-                              categorical = T,
+                              categorical = F,
                               prob = .89,
                               method = 'fitted')
 

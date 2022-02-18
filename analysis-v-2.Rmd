@@ -38,23 +38,23 @@ knitr::opts_chunk$set(#
 library("tidyverse")
 library("easystats")
 library("ggplot2") #plots
-library("sjstats") #test statistics
-library("sjPlot")
-library("sjmisc")
-library("insight")
-library("see")
-library("performance")
+#library("sjstats") #test statistics
+#library("sjPlot")
+#library("sjmisc")
+##library("insight")
+#library("see")
+#library("performance")
 library("ggraph")
-library("parameters")
+#library("parameters")
 library("lme4")
-library("psych") ## correlation matrix
+#library("psych") ## correlation matrix
 library("table1")
 library("ggeffects")
-library("gghighlight")
-library("texreg")
+#library("gghighlight")
+#library("texreg")
 library("kableExtra")
 #library("naniar") # missingness
-#library("Amelia")
+library("Amelia")
 #library("magrittr")
 library("patchwork")
 library("texreg")
@@ -65,8 +65,7 @@ library("here")
 #library("statsExpressions")
 #library("ggstatsplot")
 library("ggthemes")
-library("ggdag")
-library("rstan")
+=library("rstan")
 library("brms")
 library("tidybayes")
 library("bayesplot")
@@ -158,48 +157,46 @@ df <- d %>%
 
 ```{r}
 # get data into shape
+
 d1 <- df %>%
   dplyr::filter(
-    !is.na(wb_psychANXIETY),
-    !is.na(age),
-    !is.na(rel_CHURCHFREQ),
-   # !is.na(wb_psychMEANING),
-    !is.na(male),
-    !is.na(rel_EXTENTBELIEVEGOD),
+   #  !is.na(wb_psychANXIETY),
+   #  !is.na(age),
+   #  !is.na(rel_CHURCHFREQ),
+   # # !is.na(wb_psychMEANING),
+   #  !is.na(male),
+   #  !is.na(rel_EXTENTBELIEVEGOD),
   ) %>%
   dplyr::mutate(
     anx = as.integer(6- wb_psychANXIETY), # reverse coded! rescale 1-5
-    anx_s = scale(anx),
+    #anx_s = scale(anx),
     #put outcome in ST units (see McElreath 2021)  # not necessary
-    age_s = scale(age),
+    #age_s = scale(age),
     ch = rel_CHURCHFREQ,
-    mn  = wb_psychMEANING,
-    bg =  rel_EXTENTBELIEVEGOD,
-    ch_s = scale(rel_CHURCHFREQ),
-    mn_s = scale(wb_psychMEANING),
-    bg_s = scale(rel_EXTENTBELIEVEGOD)
+  #  mn  = wb_psychMEANING,
+    edu = education,
+    bg =  rel_EXTENTBELIEVEGOD#,
+  #  ch_s = scale(rel_CHURCHFREQ),
+  #  mn_s = scale(wb_psychMEANING),
+   # bg_s = scale(rel_EXTENTBELIEVEGOD)
   ) %>%
   dplyr::select(anx,
                 ch,
-                mn,
+                age,
+                ses,
+                #    mn,
+                edu,
                 bg,
-                anx_s,
-                age_s,
-                ch_s,
-                mn_s,
-                male2,
+                # anx_s,
+                # age_s,
+                #  ch_s,
+                #  mn_s,
+                edu,
                 country,
                 male,
-                bg_s,
+                #   bg_s,
                 wb_psychANXIETY)
 
-## degroup variables for within and between analysis
-## https://cran.r-project.org/web/packages/parameters/vignettes/demean.html
-# d1 <-
-#   cbind(d1,
-#         parameters::demean(d1, select = c("anx", "ch", "bg"), group = "country"))
-
-#hist(d1$anx)
 ```
 
 ## Causal Model: belief in God
@@ -208,15 +205,15 @@ d1 <- df %>%
 library("ggdag")
 library("dagitty")
 dg1a <- dagify(
-  anx  ~ belief + church + male + country + U,
-  belief ~ age + male + country + church + U,
-  church ~ age + male + country + U,
+  anx  ~ belief + church  + age + male + ses + country ,
+  belief ~ age + church + male + edu + ses  + church + country,
+  church ~ age + male + edu + ses + country,
   ses ~ country + age + edu,
-  edu ~ country + male, 
-  U ~ age + ses + country,
+  edu ~ country + male + age, 
+ # U ~ age + ses + country,
   exposure =  "belief",
   outcome =   "anx",
-  latent = "U",
+ # latent = "U",
   labels = c(
     "belief" = "belief God",
     "church" = "religious service attendance",
@@ -229,95 +226,52 @@ dg1a <- dagify(
     "U" = "Unmeasured
     distressing life events"
   )
-) #%>%
- # tidy_dagitty()       
+)     
+dg1a
+print( impliedConditionalIndependencies( dg1a ) )
+print( adjustmentSets( dg1a,  "belief","anx" ) )
 
-d0a <-ggdag::ggdag(dg1a, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("What if we were to assume distressing events increase belief in God?")
-d0a
-# graph adjustment sets
-
-d1a<-ggdag::ggdag_adjustment_set(dg1a, node_size = 14, text = FALSE, use_labels = "label") +
-  theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("If we assume distressing events affect belief and service we cannot estimate causal effects ")
-
-d1a 
-
-
-dg1 <- dagify(
-  anx  ~ belief + church + male + country + U,
-  belief ~ age + male + country + church + U,
-  church ~ age + male + country + U,
-  ses ~ country + age + edu,
-  edu ~ country + male, 
-  U ~ age + ses + country,
-  exposure =  "belief",
-  outcome =   "anx",
-  latent = "U",
-  labels = c(
-    "belief" = "belief God",
-    "church" = "religious service attendance",
-    "anx" = "anxiety",
-    "edu" = "education",
-    "ses" = "SES",
-    "male" = "male",
-    "country" = "country",
-    "age" = "age",
-    "U" = "Unmeasured
-    distressing life events",
-    coords = list(x = c(anx =6 , 
-                        belief = 5, 
-                        church = 4, 
-                        ses = 3,
-                        male = 2, 
-                        age = 2,
-                        country = 2,
-                        U = 1),
-                  y = c(anx = 2, 
-                        belief = 2, 
-                        church = 2, 
-                        ses = 2,
-                        male = 2, 
-                        age = 2,
-                        country = 1,
-                        U = 1)) #%>%#%>%
- # tidy_dagitty()       
 # 
-dp0 <-ggdag::ggdag(dg1, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("Assumed unmeasured causal effects of distressing experiences")
-
-dp0
+# d0a <-ggdag::ggdag(dg1a, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("What if we were to assume distressing events increase belief in God?")
+# d0a
 # # graph adjustment sets
 # 
-#dp1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = "label") +
+# d1a<-ggdag::ggdag_adjustment_set(dg1a, node_size = 14, text = FALSE, use_labels = "label") +
 #   theme(legend.position = "bottom") +
-#   theme_dag() + ggtitle("Adjustment sets for Belief in God")
-#dp1
-dp0
+#   theme_dag() + ggtitle("If we assume distressing events affect belief and service we cannot estimate causal effects ")
+# 
+# d1a 
+# 
+# 
+# # 
+# dp0 <-ggdag::ggdag(dg1, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("Assumed unmeasured causal effects of distressing experiences")
+# 
+# dp0
+# # # graph adjustment sets
+# # 
+# #dp1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = "label") +
+# #   theme(legend.position = "bottom") +
+# #   theme_dag() + ggtitle("Adjustment sets for Belief in God")
+# #dp1
+# dp0
 ```
+'
+We adjust for: { church, country, male, ses } . Because we do not have information about education, we condition on the ladder
+
 
 ## Causal model: religious service
-
-We condition on the following model:
-
--   religion + ses + male + country + ses
-
--   age + male + country + and unmeasured latent variable2 (e.g. parent's religion, call this U1) affects Religion
-
--   country + age + an unmeasured latent variable1 causes ses (citations...)
-
--   our "exposure" is religious service attendance or religious belief and our outcome is "anxiety"
 
 ```{r}
 library("ggdag")
 dg2 <- dagify( 
-  anx  ~ belief + church + male + country + U,
-  belief ~ age + male + country + church,
-  church ~ age + male + country,
+  anx  ~ belief + church  + age + male + ses + country ,
+  belief ~ age + church + male + edu + ses  + church + country,
+  church ~ age + male + edu + ses + country,
   ses ~ country + age + edu,
-  edu ~ country + male, 
-  U ~ age + ses + country,
+  edu ~ country + male + age, 
   exposure =  "church",
   outcome =   "anx",
-  latent = "U",
+#  latent = "U",
   labels = c(
     "belief" = "belief God",
     "church" = "religious service attendance",
@@ -330,78 +284,124 @@ dg2 <- dagify(
     "U" = "Unmeasured
     distressing life events"
   )
-) %>%
+) 
+
+%>%
   tidy_dagitty()  
 
-ggdag::ggdag(dg2) + theme_dag()
+print( impliedConditionalIndependencies( dg2 ) )
+print( adjustmentSets( dg1a,  "church", "anx" ) )
 
-nocause <- ggdag::ggdag(dg2, text = FALSE, use_labels = "label")  + theme_dag() + labs(title = "Assume unmeasured distressing experience does not affect Belief or Service")
-nocause
-
-dg0<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
-  theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment set for religious service
-assuming service does not change from distress")
-
-dp0
-
-
-dpz <- dagify(
-  anx  ~ belief + church + male + country + U,
-  belief ~ age + male + country + church,
-  church ~ age + male + country,
-  ses ~ country + age + edu,
-  edu ~ country + male, 
-  U ~ age + ses + country,
-  exposure =  "belief",
-  outcome =   "anx",
-  latent = "U",
-  labels = c(
-    "belief" = "belief God",
-    "church" = "religious service attendance",
-    "anx" = "anxiety",
-    "edu" = "education",
-    "ses" = "SES",
-    "male" = "male",
-    "country" = "country",
-    "age" = "age",
-    "U" = "Unmeasured
-    distressing life events"
-  )
-)
-
-ggdag::ggdag(dpz) + theme_dag()
-
-
-# graph adjustment sets
-dg1<-ggdag::ggdag_adjustment_set(dpz, node_size = 14, text = FALSE, use_labels = "label") +
-  theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment set for religious belief
-assuming belief does not change from distress")
-
-dg1
+# 
+# ggdag::ggdag(dg2) + theme_dag()
+# 
+# nocause <- ggdag::ggdag(dg2, text = FALSE, use_labels = "label")  + theme_dag() + labs(title = "Assume unmeasured distressing experience does not affect Belief or Service")
+# nocause
+# 
+# dg0<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
+#   theme(legend.position = "bottom") +
+#   theme_dag() + ggtitle("Adjustment set for religious service
+# assuming service does not change from distress")
+# 
+# dp0
+# 
+# 
+# dpz <- dagify(
+#   anx  ~ belief + church + male + country + U,
+#   belief ~ age + male + country + church,
+#   church ~ age + male + country,
+#   ses ~ country + age + edu,
+#   edu ~ country + male, 
+#   U ~ age + ses + country,
+#   exposure =  "belief",
+#   outcome =   "anx",
+#   latent = "U",
+#   labels = c(
+#     "belief" = "belief God",
+#     "church" = "religious service attendance",
+#     "anx" = "anxiety",
+#     "edu" = "education",
+#     "ses" = "SES",
+#     "male" = "male",
+#     "country" = "country",
+#     "age" = "age",
+#     "U" = "Unmeasured
+#     distressing life events"
+#   )
+# )
+# 
+# ggdag::ggdag(dpz) + theme_dag()
+# 
+# 
+# # graph adjustment sets
+# dg1<-ggdag::ggdag_adjustment_set(dpz, node_size = 14, text = FALSE, use_labels = "label") +
+#   theme(legend.position = "bottom") +
+#   theme_dag() + ggtitle("Adjustment set for religious belief
+# assuming belief does not change from distress")
+# 
+# dg1
 ```
 
-Save image
-
-```{r dg1, eval=FALSE}
-# save graph
-ggsave(
-  dg1,
-  path = here::here("Figs"),
-  width = 10,
-  height = 5,
-  units = "in",
-  filename = "dag_belief.jpg",
-  device = 'jpeg',
-  limitsize = FALSE,
-  dpi = 1200
-)
-
-```
+We have two adjustment sets: { age, church, country, male, ses } and { church, country, edu, male, ses }
 
 
-```{r dp0, eval=FALSE}
+<!-- ```{r dg1, eval=FALSE} -->
+<!-- # save graph -->
+<!-- ggsave( -->
+<!--   dg1, -->
+<!--   path = here::here("Figs"), -->
+<!--   width = 10, -->
+<!--   height = 5, -->
+<!--   units = "in", -->
+<!--   filename = "dag_belief.jpg", -->
+<!--   device = 'jpeg', -->
+<!--   limitsize = FALSE, -->
+<!--   dpi = 1200 -->
+<!-- ) -->
+
+<!-- ``` -->
+
+
+<!-- ```{r dp0, eval=FALSE} -->
+<!-- # save graph -->
+<!-- ggsave( -->
+<!--   dg1, -->
+<!--   path = here::here("Figs"), -->
+<!--   width = 10, -->
+<!--   height = 5, -->
+<!--   units = "in", -->
+<!--   filename = "dag_church.jpg", -->
+<!--   device = 'jpeg', -->
+<!--   limitsize = FALSE, -->
+<!--   dpi = 1200 -->
+<!-- ) -->
+
+<!-- ``` -->
+
+## Multiple imputation 
+
+
+
+
+
+### Visualise missing data
+
+
+Next we need to examine patterns of missing-ness, which might spoil inference.
+
+```{r cache = TRUE}
+library("naniar")
+vis_miss(df) # substantial pattern of missingness in a few variables, 
+df
+df$wb_soc_3
+dff<-df%>%
+  select(-wb_soc_3)
+sum(is.na(df$education))
+
+
+
+miss_graph<- gg_miss_upset(dff)
+miss_graph
 # save graph
 ggsave(
   dg1,
@@ -415,324 +415,382 @@ ggsave(
   dpi = 1200
 )
 
+
+library(Amelia)
+
+
+  # x is the longitudional dataframe (here 'd_3')
+set.seed(1234)
+prep <- d1 %>% # Remove what we do not need anymore
+    arrange(country) %>%
+    dplyr::select(anx,
+                  ch,
+                  age,
+                  edu,
+                  bg,
+                  edu,
+                  country,
+                  male,
+                  anx, 
+                  ses)
+# impute missing
+prep <- as.data.frame(prep) # tibble won't run in amelia
+set.seed(1234)
+prep2 <- Amelia::amelia(
+  prep,
+  #dataset to impute
+  m = 10,
+  # number of imputations
+  cs = c("country"),
+  #ts = c("years"),
+  noms = c(
+    "male"
+  ))
+  #idvars = c("country")#,
+  # not imputing outcomes
+ # polytime = 3
+)  #https://stackoverflow.com/questions/56218702/missing-data-warning-r
+
+out <- Amelia::transform.amelia(
+  prep2,
+  age_s = scale(age),
+  bg_s = scale(bg),
+  anx_s = scale(anx),
+  age_s = scale(age),
+  ch_s =scale(ch),
+  edu_s = scale(edu),
+  ses_s = scale(ses),
+  male_2 = scale(as.numeric(male))/2) # scale by 2 sds
+
+#saveRDS(out, here::here("mods","out"))
+out <-readRDS(here::here("mods","out"))
 ```
 
 
+We find there is substantial missingness in denomination. There is also missingness in ethnicity. Overall missingness is low in other indicators. However, 
+Because missingness can introduce bias, we multiply impute responses. 
 
 
-Graph for paper
 
-## Anxiety causes belief DAG
+## Model for belief 
+
+
+### gee
 
 ```{r}
-dpL <- dagify(
-  anx  ~  church + male + country + U,
-  belief ~ age + male + country + church + anx,
-  church ~ age + male + country,
-  ses ~ country + age + edu,
-  edu ~ country + male, 
-  U ~ age + ses + country,
-  exposure =  "anx",
-  outcome =   "belief",
-  latent = "U",
-  labels = c(
-    "belief" = "belief God",
-    "church" = "religious service attendance",
-    "anx" = "anxiety",
-    "edu" = "education",
-    "ses" = "SES",
-    "male" = "male",
-    "country" = "country",
-    "age" = "age",
-    "U" = "Unmeasured
-    distressing life events"
-  )
-) %>%
-  tidy_dagitty()  
+##
+#{ age, country, edu, male, ses }
+m<-10
+models<-NULL
+for(i in 1:m) {
+  models[[i]]  <- geeglm(
+  anx_s ~ bg_s + ch_s + age_s + edu_s + male_2 + ses_s,
+  data = out$imputations[[i]],  
+  id = country,
+  corstr = "exchangeable"
+)
+}
 
-dl <- ggdag::ggdag(dpL, text = F, use_labels = "label") + theme_dag()
-dl1<- dl + labs(title ="Assume Anxiety causes Belief in God")
-dl1
-
-dl2<-ggdag::ggdag_adjustment_set(dpL, node_size = 14, text = FALSE, use_labels = "label") +
-  theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment set assuming anxiety causes belief in God")
-dl2
+# saveRDS(models, here::here(
+#   "mods","models.rds")
+# )
 
 
+parameters::pool_parameters(models)
+
+
+pred <- ggeffects::ggemmeans(models[[1]], terms = c("bg_s[all]"))
+pred
+
+plot(pred,
+     add.data=T,dot.alpha=.1, 
+     facets = F)  + #scale_y_continuous(limits=c(-.5,.5)) + 
+  theme_classic() + ggtitle("") # title to be suppled
 ```
 
-## Anxiety causes church DAG
-
-```{r}
-dpC <- dagify(
-  anx  ~   male + country + U,
-  belief ~ age + male + country + church + anx,
-  church ~ age + male + country,
-  ses ~ country + age + edu,
-  edu ~ country + male, 
-  U ~ age + ses + country,
-  exposure =  "anx",
-  outcome =   "church",
-  latent = "U",
-  labels = c(
-    "belief" = "belief God",
-    "church" = "religious service attendance",
-    "anx" = "anxiety",
-    "edu" = "education",
-    "ses" = "SES",
-    "male" = "male",
-    "country" = "country",
-    "age" = "age",
-    "U" = "Unmeasured
-    distressing life events"
-  )
-) %>%
-  tidy_dagitty()  
-
-dC <- ggdag::ggdag(dpC, text = F, use_labels = "label") + theme_dag()
-dlC<- dC + labs(title ="Assume Anxiety causes Religious Service")
-dlC
-
-dl2C<-ggdag::ggdag_adjustment_set(dpC, node_size = 14, text = FALSE, use_labels = "label") +
-  theme(legend.position = "bottom") +
-  theme_dag() + ggtitle("Adjustment set for Anxiety causing Religious Service")
-dl2C
-
-
-
-
-```
-
-## DAG graph
-
-```{r}
-library(patchwork)
- (dp0 + d1a)/   (nocause + dg1 + dp2)  /(dl1 + dl2 + dl2C)+   plot_layout(guides = 'collect')  + plot_annotation(title = 'Three causal models', tag_levels = "a") 
-# dag_ful 20/20
-```
-
-### correlation
-
-```{r}
-correlation::correlation(d1, select = "ch_s",select2 = "bg_s")
-
-correlation::correlation(d1, select = "bg_s",select2 = "anx")
-
-correlation::correlation(d1, select = "ch_s",select2 = "anx")
-
-```
-
-```{r}
-library(lme4)
-```
-
-### Check LMER Results
-
-```{r}
-library(patchwork)
-mlmerCH <- lmer(
-    anx ~
-    #bg_s +
-    ch_s +
-    age_s  +
-    male +
-    ( 1 + ch_s | country), 
-  data = d1)
-
-
-sjPlot::tab_model(mlmerCH)
-
-
-mlmerBG <- lmer(
-    anx ~
-    bg_s +
-    ch_s +
-    age_s  +
-    male +
-    ( 1 + bg_s | country), 
-  data = d1)
-
-
-sjPlot::tab_model(mlmerBG)
-```
-
-## General Estimating Equations
-
-### IPW Anxiety \~ Belief
-
-
-First check for imbalance using the cobolt package. 
-
-```{r}
-# CHECK BALANCE
-# test
-cobalt::bal.tab(bg_s ~ age_s  + male + country,
-        data = d1, estimand = "ATE", m.threshold = .05)
-```
-
-
-Get inverse probability weights 
-
-```{r}
-w_out_bs <- weightit(bg_s ~ age_s  +ch_s +  male + country,
-        data = d1, estimand = "ATE", method = "ebal", stabilize = TRUE)
-w_out_bs
-
-summary(w_out_bs)
-sum(w_out_bs$weights)
-
-cobalt::bal.tab(w_out_bs, m.threshold = .05, disp.v.ratio = TRUE)
-```
-
-
+### Marginal structural model Church
 
 
 ```{r}
-library("ipw")
-d1ipwB <- ipw::ipwpoint(
-  exposure = bg_s,
+library(mice)
+d2<-mice(d1)
+d3<-complete(d2)
+saveRDS(d3,here::here("mods","d3"))
+d3 <-readRDS(here::here("mods","d3"))
+d4<-d3%>%
+  select(anx, ch, bg, age, edu,male,ses,country)%>%
+  drop_na()%>%
+  mutate(anx_s = scale(anx),
+         bg_s = scale(bg),
+         ch_s = scale(ch),
+         age_s = scale(age),
+         edu_s = scale(edu),
+         ses_s = scale(ses),
+         male_2 =scale(as.numeric(male))/2,
+         ses_s = scale(ses),
+         country=as.factor(country))
+
+
+
+m<-10
+modelsCH<-NULL
+for(i in 1:m) {
+  modelsCH[[i]]  <- geeglm(
+  anx_s ~  ch_s + age_s + edu_s + male_2 + ses_s,
+  data = out$imputations[[i]],  
+  id = country,
+  corstr = "exchangeable"
+)
+}
+
+saveRDS(modelsCH, here::here(
+  "mods","modelsCH.rds")
+)
+
+
+pred <- ggeffects::ggemmeans(modelsCH[[1]], terms = c("ch_s[all]"))
+pred
+
+plot(pred,
+    # add.data=T,dot.alpha=.1, 
+     facets = F)  + scale_y_continuous(limits=c(-.5,.5)) + theme_classic() + ggtitle("") # title to be suppled
+parameters::pool_parameters(modelsCH)
+
+
+
+parameters::pool_parameters(modelsCH)
+#parameters::pool_parameters(modelschG)
+
+library(ipw)
+
+
+dbl <- ipw::ipwpoint(
+  exposure = bg_g,
   family = "gaussian",
   numerator = ~ 1,
-  denominator = ~  ch_s + age_s  + male + country,
-  data = as.data.frame(d1)
+  denominator = ~ age_s +ch_s + edu_s + male_2 + ses_s + country,
+  trunc = 0.01,
+  data = as.data.frame(d4)
 )
 
-
-summary(d1ipwB$ipw.weights)
-sum(d1ipwB$ipw.weights >= 10)
-
-
-d1pB <- d1 %>% 
-  mutate(ipw = w_out_bs$weights) %>%
-  filter(d1ipwB$ipw.weights < 10)
-
-
-```
-
-Model:
-
-```{r}
-mgeeB  <- geeglm(
-  anx ~
-    bg_s,# already weighted
-   # ch_s +
-   # age_s  +
-   # male,
-  data = d1pB,
-  id = country,
-  corstr = "exchangeable",
-  weights = ipw
-)
-mgeeB
-
-parameters::model_parameters(mgeeB) %>%
-  print_html()
-
-library(ggeffects)
-p0BG <- plot(ggeffects::ggemmeans(mgeeB, terms = "bg_s [all]"), add.data = TRUE, dot.alpha = 0.1)    # 
-p0BG 
-```
-
-### IPW Anxiety \~ Church
-
-First we create Inverse Probability Weights
-
-```{r}
-library("ipw")
-
-d1ipw <- ipw::ipwpoint(
+dch <- ipw::ipwpoint(
   exposure = ch_s,
   family = "gaussian",
   numerator = ~ 1,
-  denominator = ~  age_s  + male + country,
-  data = as.data.frame(d1)
+  denominator = ~ age_s + edu_s + male_2 + ses_s + country,
+  trunc = 0.01,
+  data = as.data.frame(d4)
 )
 
+d1p <- d4 %>% 
+  mutate(ipwCH = dch$weights.trunc,
+         ipwBG = dbl$weights.trunc)
 
-summary(d1ipw$ipw.weights)
-sum(d1ipw$ipw.weights > 10)
-
-
-d1p <- d1 %>% 
-  mutate(ipw = d1ipw$ipw.weights) %>%
-  filter(ipw < 10)
+ 
+max(d1p$ipwBG)
+max(d1p$ipwCH)
 ```
 
-Model
 
 ```{r}
-mgeeCH <- geeglm(
-  anx ~
-    ch_s,# + # already weighted
-    #age_s  +
-  #  male,
-  data = d1p,
+
+ipb_bg<- geeglm(
+  anx_s ~ bg_s,
+  data = d1p,  
   id = country,
-  weights = ipw
+  corstr = "exchangeable",
+  weights = ipwBG
 )
 
-
-parameters::model_parameters(mgeeCH) %>%
-  print_html()
-
-library(ggeffects)
-pmgeeCH <- plot(ggeffects::ggemmeans(mgeeCH, terms = "ch_s [all]"), add.data = TRUE, dot.alpha = 0.1)    # 
-pmgeeCH
-```
-
-Model with with trimmed IPW (as recommended to avoid leverage from rare cases). Note, the result here is the same.
-
-```{r, eval = FALSE}
-# trim IPW to less than 10 
-d1pf <- d1 %>% 
-  mutate(ipw = d1ipw$ipw.weights) %>%
-  filter(ipw < 10)
-
-m0f <- geeglm(
-  anx ~
-    ch_s,# +
-    #age_s  +
-  #  male,
-  data = d1pf,
+ipb_ch<- geeglm(
+  anx_s ~  ch_s,
+  data = d1p,  
   id = country,
-  weights = ipw
+  corstr = "exchangeable",
+  weights = ipwCH
 )
 
-parameters::model_parameters(m0f) %>%
-  print_html()
+model_parameters(ipb_bg)
 
-library(ggeffects)
-p0f <- plot(ggeffects::ggemmeans(m0f, terms = "ch_s [all]"), add.data = TRUE, dot.alpha = 0.1)    # 
-p0f
+model_parameters(ipb_ch)
+
+library(EValue)
+
+# sensitivity = Church
+evalues.OLS(-0.08, se = 0.01, sd = 1, delta = 1)
+
+
+# sensitivity
+evalues.OLS(0.04, se = 0.01, sd = 1, delta = 1)
+
+bias_plot(1.3009531, xmax = 6)
+
+
+
+# An E-value for unmeasured confounding is minimum strength of association, on the risk ratio scale, that unmeasured confounder(s) would need to have with both the treatment and the outcome to fully explain away a specific treatment–outcome association, conditional on the measured covariates.
+# 
+# The estimate is converted appropriately before the E-value is calculated. See conversion functions for more details. The point estimate and confidence limits after conversion are returned, as is the E-value for the point estimate and the confidence limit closest to the proposed "true" value (by default, the null value.)
+# 
+# For an OLS() estimate, the E-value is for linear regression with a continuous exposure and outcome. Regarding the continuous exposure, the choice of delta defines essentially a dichotomization in the exposure between hypothetical groups of subjects with exposures equal to an arbitrary value c versus to another hypothetical group with exposures equal to c + delta.
+# 
+# For example, if resulting E-value is 2, this means that unmeasured confounder(s) would need to double the probability of a subject's having exposure equal to c + delta instead of c, and would also need to double the probability of being high versus low on the outcome, in which the cutoff for "high" versus "low" is arbitrary subject to some distributional assumptions (Chinn, 2000).
 ```
 
-## Results summary Anxiety \~ Belief
+
+Adjusted GEE no weights
+
+```{r}
+
+ipb_bg_noweights <- geeglm(
+  anx_s ~ bg_s + ch_s + age_s + edu_s + male_2 + ses_s,
+  data = d1p,  
+  id = country,
+  corstr = "exchangeable"
+)
+
+ipb_ch_noweights <- geeglm(
+  anx_s ~ ch_s + age_s + edu_s + male_2 + ses_s,
+  data = d1p,  
+  id = country,
+  corstr = "exchangeable"
+)
+
+model_parameters(ipb_bg_noweights)
+model_parameters(ipb_bg)
+
+model_parameters(ipb_ch_noweights)
+model_parameters(ipb_ch)
+```
+
+
+We note that the multi-level models give different estimates. 
+
+### GlMM TMB BELIEF
+
+```{r}
+library(glmmTMB)
+m<-10
+modelsb<-NULL
+for(i in 1:m) {
+  modelsb[[i]]  <- glmmTMB(anx_s ~ bg_s + ch_s + age_s + edu_s + male_2 + ses_s + 
+                            (1+ bg_s|country), 
+                              data = out$imputations[[i]],
+                              family =)
+}
+
+parameters::pool_parameters(modelsb)
+
+
+pred <- ggeffects::ggemmeans(modelsb[[1]], terms = c("bg_s[all]"))
+pred
+
+plot(pred,
+    # add.data=T,dot.alpha=.1, 
+     facets = F)  + scale_y_continuous(limits=c(-.2,.2)) + theme_classic() + ggtitle("") # title to be suppled
+```
+
+
+
+### GlMM TMB CHURCH
+
+```{r}
+library(glmmTMB)
+m<-10
+modelsC<-NULL
+for(i in 1:m) {
+  modelsC[[i]]  <- glmmTMB(anx_s ~  ch_s + age_s + edu_s + male_2 + ses_s + 
+                            (1+ bg_s|country), 
+                              data = out$imputations[[i]],
+                              family =)
+}
+
+
+parameters::pool_parameters(modelsC)
+
+
+pred <- ggeffects::ggemmeans(modelsC[[1]], terms = c("ch_s[all]"))
+pred
+
+plot(pred,
+     add.data=T,dot.alpha=.05, 
+     facets = F)  + theme_classic() + ggtitle("") # title to be suppled
+```
+
+
+### Test implied conditional independence
+
+
+
+
+```{R}
+m<-10
+models<-NULL
+for(i in 1:m) {
+  models[[i]] <- lmer(anx_s ~ 
+                        bg_s + 
+                        ch_s + 
+                        age_s + 
+                        edu_s + 
+                        male_2 + 
+                        ses_s + 
+                        (1+ bg_s|country ), data=out$imputations[[i]])
+}
+
+
+parameters::pool_parameters(models,
+                            component = "marginal")
+
+
+pred <- ggeffects::ggemmeans(models[[1]], terms = c("bg_s[all]"))
+pred
+
+plot(pred,
+    # add.data=T,dot.alpha=.1, 
+     facets = F)  + scale_y_continuous(limits=c(-.2,.2)) + theme_classic() + ggtitle("") # title to be suppled
 
 ### Model
 
-```{r}
-m1 <- brm( 
-  anx ~
+
+
+listout <- list(
+  out$imputations$imp1,
+  out$imputations$imp2,
+  out$imputations$imp3,
+  out$imputations$imp4,
+  out$imputations$imp5,
+  out$imputations$imp6,
+  out$imputations$imp7,
+  out$imputations$imp8,
+  out$imputations$imp9,
+  out$imputations$imp10
+)
+#saveRDS(listout, here::here("mods", "listout"))
+listout<- readRDS( here::here("mods", "listout"))
+
+m_bg <- brm_multiple( 
+  anx_s ~
     bg_s +
     ch_s +
-    age_s  +
-    male +
+    age_s +
+    edu_s +
+    male_2 +
+    ses_s +
     (1 + bg_s | country),
-  data = d1,
-  family = cumulative(link = "logit"),
+  data = listout,
   seed = 1234,
   warmup = 1000,
-  iter = 3000,
+  iter = 2000,
   chains = 4,
-  file = here::here("models", "m2o_real")
+  backend = "cmdstanr", 
+  threads = threading(4),
+  file = here::here("mods", "m_bg")
 )
 
-parameters::model_parameters(m1, test = "p_direction")
-brms::ranef(m1)
+parameters::model_parameters(m_bg, test = "p_direction")
+brms::ranef(m_bg)
 
 parameters::parameters(
-  m1,
+  m_bg,
   test = "pd",
   priors = FALSE, 
   effects = "all",
@@ -745,6 +803,41 @@ parameters::parameters(
     print()
 
 ```
+
+
+### Bayesian Church Attendaance
+
+```{r}
+
+listout <- readRDS(here::here("mods","listout"))
+modmc <- brm_multiple(
+  anx_s ~ ch_s + age_s + edu_s + male_2 +ses_s + (1 + ch_s | country),
+  data = listout,
+  seed = 1234,
+  warmup = 1000,
+  iter = 2000,
+  chains = 4,
+  backend = "cmdstanr",
+  threads = threading(4)
+)
+
+#saveRDS(modmc, here::here("mods", "modmc.rds"))
+summary(modmc)
+```
+
+
+### Summary of selection bias 
+
+```{r}
+set.seed(1234)
+y<- rnorm(1000,0,1)
+a<- rnorm(1000,0,1)
+s<- rnorm(1000, a -(2*y),4)
+
+dlbind <-data.frame(y,a,s)
+summary(lm(y ~  a + s, data = dlbind))
+```
+
 
 Coefficient plots
 

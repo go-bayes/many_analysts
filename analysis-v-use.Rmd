@@ -67,20 +67,23 @@ library("here")
 library("ggthemes")
 =library("rstan")
 library("brms")
-library("tidybayes")
+library("bayesplot")
 library("bayesplot")
 library("dagitty")
 library("ggdag")
 library("geepack")  # marginal structural models
 library("ipw") # inverse probability weighting. 
 library("WeightIt")# inverse probability weighting. 
-library("mice")
+library("emmeans")
+library("splines")
 rstan_options(auto_write=TRUE)
 options(mc.cores=parallel::detectCores ())
 theme_set(theme_few())
-knitr::write_bib(c(.packages("geepack")))
+cite_packages(include_R = TRUE)
 
-cite_packages()
+citation("daggity")
+toBibtex(citation("ggdag"))
+print(citation("EValue") , bibtex=TRUE)
 ```
 
 ## Workflow and analysis
@@ -110,6 +113,7 @@ df <- d %>%
     # factor need to recode (eg. 7 as 0)// yikes factor transformed into a number
     IS_RELIIGOUS = rel_3,
     # factor 1 = yes, 2 = no, 3 = atheist// yikes factor transformed into a number
+    # NOOO revers scorred (1= religious, 2= not religious, 3=atheist) [R] So note that 3 = religious!!
     BELONGS_DENOMINATION = rel_4,
     # relig
     rel_EXTENTBELIEVEGOD = rel_5,
@@ -157,7 +161,6 @@ df <- d %>%
   )
 max(df$rel_EXTENTBELIEVEGOD)
 max(df$rel_CHURCHFREQ)
-
 ```
 
 ```{r}
@@ -174,7 +177,7 @@ d1 <- df %>%
   ) %>%
   dplyr::mutate(
     anx = as.integer(6- wb_psychANXIETY), # reverse coded! rescale 1-5
-    #anx_s = scale(anx),
+    religious = as.integer(IS_RELIIGOUS), #(1= religious, 2= not religious, 3=atheist) [R]
     #put outcome in ST units (see McElreath 2021)  # not necessary
     #age_s = scale(age),
     ch = rel_CHURCHFREQ,
@@ -199,6 +202,7 @@ d1 <- df %>%
                 edu,
                 country,
                 male,
+                religious,
                 #   bg_s,
                 wb_psychANXIETY)
 
@@ -310,41 +314,41 @@ print( adjustmentSets( dg1a,  "church", "anx" ) )
 # 
 # dp0
 # 
-# 
-# dpz <- dagify(
-#   anx  ~ belief + church + male + country + U,
-#   belief ~ age + male + country + church,
-#   church ~ age + male + country,
-#   ses ~ country + age + edu,
-#   edu ~ country + male, 
-#   U ~ age + ses + country,
-#   exposure =  "belief",
-#   outcome =   "anx",
-#   latent = "U",
-#   labels = c(
-#     "belief" = "belief God",
-#     "church" = "religious service attendance",
-#     "anx" = "anxiety",
-#     "edu" = "education",
-#     "ses" = "SES",
-#     "male" = "male",
-#     "country" = "country",
-#     "age" = "age",
-#     "U" = "Unmeasured
-#     distressing life events"
-#   )
-# )
-# 
-# ggdag::ggdag(dpz) + theme_dag()
+
+dpz <- dagify(
+  anx  ~ age + belief + church + male + country + ses,
+  belief ~ age + male + country + church + ses + edu,
+  church ~ age + male + country + ses +edu,
+  ses ~ country  + edu,
+  edu ~ country + male + age ,
+  U ~ age + ses + country,
+  exposure =  "church",
+  outcome =   "anx",
+  latent = "U",
+  labels = c(
+    "belief" = "belief God",
+    "church" = "religious service attendance",
+    "anx" = "anxiety",
+    "edu" = "education",
+    "ses" = "SES",
+    "male" = "male",
+    "country" = "country",
+    "age" = "age",
+    "U" = "Unmeasured
+    distressing life events"
+  )
+)
+
+ggdag::ggdag(dpz) + theme_dag()
 # 
 # 
 # # graph adjustment sets
-# dg1<-ggdag::ggdag_adjustment_set(dpz, node_size = 14, text = FALSE, use_labels = "label") +
-#   theme(legend.position = "bottom") +
-#   theme_dag() + ggtitle("Adjustment set for religious belief
-# assuming belief does not change from distress")
-# 
-# dg1
+dg1<-ggdag::ggdag_adjustment_set(dpz, node_size = 14, text = FALSE, use_labels = "label") +
+  theme(legend.position = "bottom") +
+  theme_dag() + ggtitle("Adjustment set for religious belief
+assuming belief does not change from distress")
+
+dg1
 ```
 
 We have two adjustment sets: { age, church, country, male, ses } and { church, country, edu, male, ses }
@@ -402,12 +406,13 @@ df
 df$wb_soc_3
 dff<-df%>%
   select(-wb_soc_3)
-sum(is.na(df$education))
+
+
+
 
 
 
 miss_graph<- gg_miss_upset(dff)
-
 miss_graph <-image_ggplot(miss_graph)
 # save graph
 str(miss_graph)
@@ -441,37 +446,7 @@ prep <- d1 %>% # Remove what we do not need anymore
                   male,
                   anx, 
                   ses)
-# impute missing
-prep <- as.data.frame(prep) # tibble won't run in amelia
-set.seed(1234)
-prep2 <- Amelia::amelia(
-  prep,
-  #dataset to impute
-  m = 10,
-  # number of imputations
-  cs = c("country"),
-  #ts = c("years"),
-  noms = c(
-    "male"
-  ))
-  #idvars = c("country")#,
-  # not imputing outcomes
- # polytime = 3
-)  #https://stackoverflow.com/questions/56218702/missing-data-warning-r
 
-out <- Amelia::transform.amelia(
-  prep2,
-  age_s = scale(age),
-  bg_s = scale(bg),
-  anx_s = scale(anx),
-  age_s = scale(age),
-  ch_s =scale(ch),
-  edu_s = scale(edu),
-  ses_s = scale(ses),
-  male_2 = scale(as.numeric(male))/2) # scale by 2 sds
-
-#saveRDS(out, here::here("mods","out"))
-out <-readRDS(here::here("mods","out"))
 ```
 
 
@@ -482,39 +457,6 @@ Because missingness can introduce bias, we multiply impute responses.
 
 ## Model for belief 
 
-
-### gee
-
-```{r}
-##
-#{ age, country, edu, male, ses }
-m<-10
-models<-NULL
-for(i in 1:m) {
-  models[[i]]  <- geeglm(
-  anx_s ~ bg_s + ch_s + age_s + edu_s + male_2 + ses_s,
-  data = out$imputations[[i]],  
-  id = country,
-  corstr = "exchangeable"
-)
-}
-
-# saveRDS(models, here::here(
-#   "mods","models.rds")
-# )
-
-
-parameters::pool_parameters(models)
-
-
-pred <- ggeffects::ggemmeans(models[[1]], terms = c("bg_s[all]"))
-pred
-
-plot(pred,
-     add.data=T,dot.alpha=.1, 
-     facets = F)  + #scale_y_continuous(limits=c(-.5,.5)) + 
-  theme_classic() + ggtitle("") # title to be suppled
-```
 
 ### Marginal structural model Church
 
@@ -539,24 +481,6 @@ d4<-d3%>%
          ses_s = scale(ses),
          country=as.factor(country))
 
-
-
-m<-10
-modelsCH<-NULL
-for(i in 1:m) {
-  modelsCH[[i]]  <- geeglm(
-  anx_s ~  ch_s + age_s + edu_s + male_2 + ses_s,
-  data = out$imputations[[i]],  
-  id = country,
-  corstr = "exchangeable"
-)
-}
-
-saveRDS(modelsCH, here::here(
-  "mods","modelsCH.rds")
-)
-
-
 pred <- ggeffects::ggemmeans(modelsCH[[1]], terms = c("ch_s[all]"))
 pred
 
@@ -570,17 +494,65 @@ parameters::pool_parameters(modelsCH)
 parameters::pool_parameters(modelsCH)
 #parameters::pool_parameters(modelschG)
 
+
+
+## MICE ONLY RELIGIOUS
+table(d1$religious)
+
+
+# Check
+d1r<- d1 %>%
+  filter(religious == 3)
+
+hist(d1r$ch)
+
+d2r<-mice(d1r)
+
+#check religious rumbers (1= religious, 2= not religious, 3=atheist) [R] So note that 3 = religious!!
+
+
+d3r<-complete(d2r)
+
+
+
+#saveRDS(d3,here::here("mods","d3r"))
+#saveRDS(d3r,here::here("mods","d3r"))
+
+d3 <-readRDS(here::here("mods","d3"))
+d3r <-readRDS(here::here("mods","d3r"))
+
+
+d4<-d3%>%
+  select(anx, ch, bg, age, edu,male,ses,country)%>%
+  drop_na()%>%
+  mutate(anx_s = scale(anx),
+         bg_s = scale(bg),
+         ch_s = scale(ch),
+         age_s = scale(age),
+         edu_s = scale(edu),
+         ses_s = scale(ses),
+         male_2 =scale(as.numeric(male))/2,
+         ses_s = scale(ses),
+         country=as.factor(country))
+
+
+d4r<-d3r%>%
+  select(anx, ch, bg, age, edu,male,ses,country)%>%
+  drop_na()%>%
+  mutate(anx_s = scale(anx),
+         bg_s = scale(bg),
+         ch_s = scale(ch),
+         age_s = scale(age),
+         edu_s = scale(edu),
+         ses_s = scale(ses),
+         male_2 =scale(as.numeric(male))/2,
+         ses_s = scale(ses),
+         country=as.factor(country))
+
+
+
 library(ipw)
 
-d4
-dbl <- ipw::ipwpoint(
-  exposure = bg_s,
-  family = "gaussian",
-  numerator = ~ 1,
-  denominator = ~ age_s +ch_s + edu_s + male_2 + ses_s + country,
-  trunc = 0.01,
-  data = as.data.frame(d4)
-)
 
 dch <- ipw::ipwpoint(
   exposure = ch_s,
@@ -592,28 +564,50 @@ dch <- ipw::ipwpoint(
 )
 
 d1p <- d4 %>% 
-  mutate(ipwCH = dch$weights.trunc,
-         ipwBG = dbl$weights.trunc)
+  mutate(ipwCH = dch$weights.trunc)
 
  
-max(d1p$ipwBG)
+
 max(d1p$ipwCH)
+
+
+# weighted
+
+dchr <- ipw::ipwpoint(
+  exposure = ch_s,
+  family = "gaussian",
+  numerator = ~ 1,
+  denominator = ~ age_s + edu_s + male_2 + ses_s + country,
+  trunc = 0.01,
+  data = as.data.frame(d4r)
+)
+
+dr <- d4r %>% 
+  mutate(ipwCH = dchr$weights.trunc)
+
+ 
+# fine, well below 10
+max(dr$ipwCH)
+
+# saveRDS(d1p, here::here(
+#   "mods","d1p"
+# ))
 ```
 
 
 ```{r}
-
-ipb_bg<- geeglm(
-  anx_s ~ bg_s,
-  data = d1p,  
+library(splines)
+ipb_ch_ln<- geeglm(
+  anx_s ~ ch_s,
+  data = d1p,
   id = country,
   corstr = "exchangeable",
-  weights = ipwBG
+  weights = ipwCH
 )
-#saveRDS(ipb_bg, here::here("mods","ipb_bg"))
+saveRDS(ipb_bg, here::here("mods","ipb_bg_ln"))
 
 ipb_ch<- geeglm(
-  anx_s ~  ch_s,
+  anx_s ~  bs(ch_s),
   data = d1p,  
   id = country,
   corstr = "exchangeable",
@@ -624,20 +618,47 @@ saveRDS(ipb_ch, here::here("mods","ipb_ch"))
 
 
 
-model_parameters(ipb_bg)
+# model_parameters(ipb_bg)
 
 model_parameters(ipb_ch)
 
-library(EValue)
-
-# sensitivity = Church
-evalues.OLS(-0.08, se = 0.01, sd = 1, delta = 1)
-
+min(d1p$ch_s) + max(d1p$ch_s)
 
 # sensitivity
-evalues.OLS(0.04, se = 0.01, sd = 1, delta = 1)
+evalues.OLS(0.04, se = 0.01, sd = 1, delta = 1.4)
 
 bias_plot(1.3009531, xmax = 6)
+
+
+### Religous Only 
+
+
+library(splines)
+r_gee <- geeglm(
+  anx_s ~ ch, # retain scale
+  data = dr,
+  id = country,
+  corstr = "exchangeable",
+  weights = ipwCH
+)
+saveRDS(r_gee, here::here("mods","r_gee"))
+
+
+hist(dr$ch)
+
+
+# model_parameters(ipb_bg)
+
+model_parameters(r_gee) # no effect
+
+min(dr$ch_s) + max(dr$ch_s)
+
+# sensitivity
+library(EValue)
+evalues.OLS(0.2238435, se = 0.01, sd = 1, delta = 1.4)
+
+#bias_plot(0.2238435, xmax = 6)
+
 
 
 
@@ -654,18 +675,18 @@ bias_plot(1.3009531, xmax = 6)
 Adjusted GEE no weights
 
 ```{r}
-
-ipb_bg_noweights <- geeglm(
-  anx_s ~ bg_s + ch_s + age_s + edu_s + male_2 + ses_s,
-  data = d1p,  
-  id = country,
-  corstr = "exchangeable"
-)
-saveRDS(ipb_bg_noweights, here::here("mods","ipb_bg_noweights"))
-
+# 
+# ipb_bg_noweights <- geeglm(
+#   anx_s ~ bg_s + ch_s + age_s + edu_s + male_2 + ses_s,
+#   data = d1p,  
+#   id = country,
+#   corstr = "exchangeable"
+# )
+# saveRDS(ipb_bg_noweights, here::here("mods","ipb_bg_noweights"))
+# 
 
 ipb_ch_noweights <- geeglm(
-  anx_s ~ ch_s + age_s + edu_s + male_2 + ses_s,
+  anx_s ~ bs(ch_s) + age_s + edu_s + male_2 + ses_s,
   data = d1p,  
   id = country,
   corstr = "exchangeable"
@@ -674,7 +695,7 @@ saveRDS(ipb_ch_noweights, here::here("mods","ipb_ch_noweights"))
 
 
 msm_lmer <- lmer(
-  anx_s ~ ch_s + age_s + edu_s + male_2 + ses_s +  (1+ ch_s|country),
+  anx_s ~ bs(ch_s) + age_s + edu_s + male_2 + ses_s +  (1+ ch_s|country),
   data = d1p, 
 )
 saveRDS(msm_lmer, here::here("mods","msm_lmer"))
@@ -682,17 +703,17 @@ saveRDS(msm_lmer, here::here("mods","msm_lmer"))
 
 
 msm_lmer_wg <- lmer(
-  anx_s ~ ch_s + (1 + ch_s|country),
+  anx_s ~ bs(ch_s) + (1 + ch_s|country),
   weights = ipwCH,
   data = d1p
 )
 saveRDS(msm_lmer_wg, here::here("mods","msm_lmer_wg"))
 
 
-model_parameters(ipb_bg_noweights)
-model_parameters(ipb_bg_noweights)
-model_parameters(ipb_bg)
-model_parameters(ipb_bg)
+# model_parameters(ipb_bg_noweights)
+# model_parameters(ipb_bg_noweights)
+# model_parameters(ipb_bg)
+# model_parameters(ipb_bg)
 
 model_parameters(ipb_ch_noweights)
 model_parameters(ipb_ch)
@@ -716,150 +737,12 @@ plot(pred,
 
 We note that the multi-level models give different estimates. 
 
-### GlMM TMB BELIEF
 
-```{r}
-library(glmmTMB)
-m<-10
-modelsb<-NULL
-for(i in 1:m) {
-  modelsb[[i]]  <- glmmTMB(anx_s ~ bg_s + ch_s + age_s + edu_s + male_2 + ses_s + 
-                            (1+ bg_s|country), 
-                              data = out$imputations[[i]],
-                              family =)
-}
-
-parameters::pool_parameters(modelsb)
-
-
-pred <- ggeffects::ggemmeans(modelsb[[1]], terms = c("bg_s[all]"))
-pred
-
-plot(pred,
-    # add.data=T,dot.alpha=.1, 
-     facets = F)  + scale_y_continuous(limits=c(-.2,.2)) + theme_classic() + ggtitle("") # title to be suppled
-```
-
-
-
-### GlMM TMB CHURCH
-
-```{r}
-library(glmmTMB)
-m<-10
-modelsC<-NULL
-for(i in 1:m) {
-  modelsC[[i]]  <- glmmTMB(anx_s ~  ch_s + age_s + edu_s + male_2 + ses_s + 
-                            (1+ bg_s|country), 
-                              data = out$imputations[[i]],
-                              family =)
-}
-
-
-parameters::pool_parameters(modelsC)
-
-
-pred <- ggeffects::ggemmeans(modelsC[[1]], terms = c("ch_s[all]"))
-pred
-
-plot(pred,
-     add.data=T,dot.alpha=.05, 
-     facets = F)  + theme_classic() + ggtitle("") # title to be suppled
-```
-
-
-### Test implied conditional independence
-
-
-
-
-```{R}
-m<-10
-models<-NULL
-for(i in 1:m) {
-  models[[i]] <- lmer(anx_s ~ 
-                        bg_s + 
-                        ch_s + 
-                        age_s + 
-                        edu_s + 
-                        male_2 + 
-                        ses_s + 
-                        (1+ bg_s|country ), data=out$imputations[[i]])
-}
-
-
-parameters::pool_parameters(models,
-                            component = "marginal")
-
-
-pred <- ggeffects::ggemmeans(models[[1]], terms = c("bg_s[all]"))
-pred
-
-plot(pred,
-    # add.data=T,dot.alpha=.1, 
-     facets = F)  + scale_y_continuous(limits=c(-.2,.2)) + theme_classic() + ggtitle("") # title to be suppled
-
-### Model
-
-
-
-listout <- list(
-  out$imputations$imp1,
-  out$imputations$imp2,
-  out$imputations$imp3,
-  out$imputations$imp4,
-  out$imputations$imp5,
-  out$imputations$imp6,
-  out$imputations$imp7,
-  out$imputations$imp8,
-  out$imputations$imp9,
-  out$imputations$imp10
-)
-#saveRDS(listout, here::here("mods", "listout"))
-listout<- readRDS( here::here("mods", "listout"))
-
-m_bg <- brm_multiple( 
-  anx_s ~
-    bg_s +
-    ch_s +
-    age_s +
-    edu_s +
-    male_2 +
-    ses_s +
-    (1 + bg_s | country),
-  data = listout,
-  seed = 1234,
-  warmup = 1000,
-  iter = 2000,
-  chains = 4,
-  backend = "cmdstanr", 
-  threads = threading(4),
-  file = here::here("mods", "m_bg")
-)
-
-parameters::model_parameters(m_bg, test = "p_direction")
-brms::ranef(m_bg)
-
-parameters::parameters(
-  m_bg,
-  test = "pd",
-  priors = FALSE, 
-  effects = "all",
-  drop = TRUE,
-  group_level = FALSE,
-  diagnostic = "Rhat") %>%
-    mutate_if(is.numeric, ~ round(., 2)) %>%
-    mutate_all(funs(str_replace(., "b_", ""))) %>%
-    kable(booktabs = T, "latex", caption =  "Parameter estimates for model of Belief on Anxiety") %>%
-    print()
-
-```
 
 
 ### Bayesian Church Attendaance
 
 ```{r}
-
 listout <- readRDS(here::here("mods","listout"))
 modmc <- brm_multiple(
   anx_s ~ ch_s + age_s + edu_s + male_2 +ses_s + (1 + ch_s | country),
@@ -882,27 +765,96 @@ summary(modmc)
 
 ```{r}
 listout <- readRDS(here::here("mods","listout"))
-modmc_wt <- brm(
+modmc_wt_linear <- brm(
   anx_s|weights(ipwCH) ~ ch_s + (1 + ch_s | country),
   data = d1p,
+    prior = c(
+    prior(normal(0, .1), class = Intercept),
+    prior(normal(-.1,.1), class = b)),
   seed = 1234,
   warmup = 1000,
   iter = 2000,
   chains = 4,
   backend = "cmdstanr",
-  file = here::here("mods","modmc_wt")
+  file = here::here("mods","modmc_wt_linear")
 )
 #saveRDS(modmc, here::here("mods", "modmc.rds"))
-summary(modmc_wt)
+summary(modmc_wt_linear)
 
+prior_summary(modmc_wt_linear)
+summary(modmc_wt_linear)
+
+library(brms)
+library(splines)
+
+listout <- readRDS(here::here("mods","listout"))
+modmc_wt_priorStrong <- brm(
+  anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
+  data = d1p,
+  prior = c(
+    prior(normal(0, .1), class = Intercept),
+    prior(normal(-.1,.1), class = b)),
+  seed = 1234,
+  warmup = 1000,
+  iter = 2000,
+  chains = 4,
+  backend = "cmdstanr",
+  file = here::here("mods","modmc_wt_priorStrong")
+)
+
+
+##### TeST PRIORS
+modmc_wt_priorStrong_TEST <- brm(
+  anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
+  data = d1p,
+  prior = c(
+    prior(normal(0, .1), class = Intercept),
+    prior(normal(-.1,.1), class = b)),
+  seed = 1234,
+  warmup = 1000,
+  iter = 2000,
+  chains = 4,
+  sample_prior = "only",
+  backend = "cmdstanr"#,
+ # file = here::here("mods","modmc_wt_priorStrong")
+)
+#saveRDS(modmc, here::here("mods", "modmc.rds"))
+summary(modmc_wt_prior)
+prior_summary(modmc_wt_prior)
+summary(modmc_wt_priorStrong)
+
+## WEAK PRIOR
+modmc_wt_prior_weak <- brm(
+  anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
+  data = d1p,
+  prior = c(prior(normal(0, 1), class = b)),
+  seed = 1234,
+  warmup = 1000,
+  iter = 2000,
+  chains = 4,
+  sample_prior = "only",
+  backend = "cmdstanr"#,
+ # file = here::here("mods","modmc_wt_prior")
+)
 ```
-
 
 
 
 ```{r, cache = TRUE}
 library(viridis)
-p0<-brms::conditional_effects(modmc_wt, "ch_s", 
+
+# make new data
+minchur<- min(d1p$ch_s)
+maxchur<- max(d1p$ch_s)
+
+library(emmeans)
+grand_mean
+
+
+
+
+
+p0<-brms::conditional_effects(modmc_wt_priorStrong, "ch_s", 
                               spaghetti = T,
                               ndraws = 1000,
                               categorical = F,
@@ -916,16 +868,50 @@ subtitle = "Inverse Probability Weighting") + scale_y_continuous(limits = c(-.5,
 church_plot
 
 
+p0priorTEST<-brms::conditional_effects(modmc_wt_priorStrong_TEST, "ch_s", 
+                              spaghetti = T,
+                              ndraws = 1000,
+                              categorical = F,
+                              prob = .95,
+                              method = 'fitted')
+
+
+church_plot_test_strong <- plot(p0priorTEST, plot = FALSE)[[1]]   +  xlab("Service attendance (standardised)") + ylab ("Anxiety (standardised)") + labs(title = "Prior Sanity Check: Baysian Multi-level Model", subtitle = "Sampling from STRONG Priors Only") + scale_y_continuous(limits = c(-.5,.25))+ 
+  theme_classic()
+church_plot_test_strong
+
+
+
+pred_brms
+
+p0priorTEST_weak<-brms::conditional_effects(modmc_wt_prior_weak, "ch_s", 
+                              spaghetti = T,
+                              ndraws = 1000,
+                              categorical = F,
+                              prob = .95,
+                              method = 'fitted')
+
+
+
+
+church_plot_test_weak <- plot(p0priorTEST_weak, plot = FALSE)[[1]]   +  xlab("Service attendance (standardised)") + ylab ("Anxiety (standardised)") + labs(title = "Prior Sanity Check: Baysian Multi-level Model", subtitle = "Sampling from WEAK Priors Only") + scale_y_continuous(limits = c(-.5,.5))+ 
+  theme_classic()
+church_plot_test_weak
+
+
 
 ipw_gee <- plot(pred,
-    # add.data=T,dot.alpha=.1, 
+    #add.data=T,dot.alpha=.1, 
      facets = F)  + 
   scale_y_continuous(limits=c(-.1,.1)) + xlab("Service attendance (standardised)") + ylab ("Anxiety (standardised)") + 
   theme_classic() +labs(title = "Generalized Estimating Equations", 
   subtitle = "Inverse Probability Weighting") + scale_y_continuous(limits = c(-.5,.5))
 ipw_gee
-model_plot <- ipw_gee + church_plot
-model_plot + plot_annotation(tag_levels = "a")
+church_plot
+model_plot <- ipw_gee + church_plot + church_plot_test_weak + church_plot_test_strong
+model_plot <- model_plot + plot_annotation(tag_levels = "a")
+
+model_plot
 
 ggsave(
   model_plot,
@@ -939,19 +925,248 @@ ggsave(
   dpi = 1200
 )
 
+
+library(brmsmargins)
+modmc_wt_priorStrong
+
+max(d1p$ch_s)#-0.8321022,2.23193
+
+h <-.001
+ames <- brmsmargins(
+  object = modmc_wt_priorStrong,
+            at = data.frame(ch_s= c(-0.8321022,2.23193)),
+            contrasts = cbind("AME x" = c(0.8321022/ h, 2.23193/ h)),
+            effects = "integrateoutRE")
+                              )
+ames$Summary
+
+
+
+ames_st <- brmsmargins(
+  object = modmc_wt_priorStrong, 
+            at = data.frame(ch_s = c(-0.8321022,2.23193)),
+            contrasts = cbind("AME x" = c(-0.8321022/ h, 2.23193/ h)),
+            effects = "integrateoutRE", CI = 0.95)
+ames_st$ContrastSummary
+knitr::kable(ames$Summary, digits = 3, "latex")
+
+
+
+
+ames_ln <- brmsmargins(
+  object = modmc_wt_linear, 
+            at = data.frame(ch_s = c(-0.8321022,2.23193)),
+            contrasts = cbind("AME x" = c(-0.8321022/ h, 2.23193/ h)),
+            effects = "integrateoutRE", CI=.95)
+ames_ln$Summary
+knitr::kable(ames$Summary, digits = 3, "latex")
+
+
+### EEMEANS
+ modmc_wt_priorStrong %>% 
+  emmeans(~ ch_s,
+          at = list(ch_s = c(-0.8321022,2.23193),
+                    country = NA),
+          epred = TRUE) %>% 
+  contrast(method = "revpairwise") 
+ 
+effect_draws <-  modmc_wt_priorStrong %>% 
+  emmeans(~ ch_s,
+          at = list(ch_s = c(-0.8321022,2.23193),
+                    country = NA),
+          epred = TRUE) %>% 
+  contrast(method = "revpairwise") %>% 
+  gather_emmeans_draws()
+
+# marginal mean 
+effect_draws %>% mean_hdi() 
+
+# linear model, for EVALUES
+effect_draws_ln <-  modmc_wt_linear %>% 
+  emmeans(~ ch_s,
+          at = list(ch_s = c(-0.8321022,2.23193),
+                    country = NA),
+          epred = TRUE) %>% 
+  contrast(method = "revpairwise") %>% 
+  gather_emmeans_draws()
+
+# marginal mean 
+effect_draws_ln %>% mean_hdi() 
+
+
+average_marginal_effect <- ggplot(autonomy_effect_draws, aes(x = .value)) +
+  stat_halfeye(fill = "dodgerblue") +
+  labs(x = "Average marginal effect of church attendance", y = "Density") +
+  theme_clean() +
+  theme(legend.position = "top")
+
+average_marginal_effect
+
+grand_mean <- modmc_wt_priorStrong %>% 
+  epred_draws(newdata = expand_grid(ch_s = seq(minchur, maxchur, by = 0.05)), 
+              re_formula = NA)
+
+  plot_grand_mean <- ggplot(grand_mean, 
+                                 aes(x = ch_s, y = .epred)) +
+  stat_lineribbon() +
+  scale_fill_brewer(palette = "Blues") +
+ # scale_fill_viridis_d(palette = "Blues") +
+  labs(x = "Frequency of religious service attendance (standard deviation units)", 
+       y = "Predicted anxiety (standard deviation units)",
+       fill = "95 HPD interval") +
+  theme_clean() +
+  theme(legend.position = "top")
+
+
+ plot_result <- average_marginal_effect + plot_grand_mean +  plot_annotation(tag_levels = "a")
+plot_result
+
+
+ggsave(
+  plot_result,
+  path = here::here("figs"),
+  width = 10,
+  height = 5,
+  units = "in",
+  filename = "plot_result.jpg",
+  device = 'jpeg',
+  limitsize = FALSE,
+  dpi = 1200
+)
+
+summary(modmc_wt_priorStrong)
+summary(modmc_wt_linear)
+
+
+# 
+
+
+library(EValue)
+summary(ipb_ch_ln)
+summary(ipb_ch)
+summary(modmc_wt_linear)
+
+# sensitivity = Church
+evalues.OLS(-0.1093  , se = 0.0172, sd = 1, delta = 1.4)
+
+evalues.OLS(-0.2649 , se = 0.0648, sd = 1, delta = 1)
+
+evalues.OLS(-0.17 , se = 0.05, sd = 1, delta = 1)
+#1.61  
+
+# multibias
+multi_evalue(est = RR(0.981), biases = selection())
+    
+
+#
+bias_plot(rr = 0.857, xmax=5)
+
+multi_bound(multi_bias(confounding()),
+                RRAUc = 2.2, RRUcY = 1.7)
+
+biases <- multi_bias(confounding(), selection("S = U"),
+                         misclassification("exposure",
+                         rare_outcome = TRUE, rare_exposure = FALSE))
+
 ```
+
+
+## Bayesian weighted regression correct sample 
+
+```{r}
+## Bayesian wieghted regression 
+
+```{r}
+b_ln <- brm(
+  anx_s|weights(ipwCH) ~ ch_s + (1 + ch | country),
+  data = dr,
+    prior = c(
+    prior(normal(0, .1), class = Intercept),
+    prior(normal(-.1,.1), class = b)),
+  seed = 1234,
+  warmup = 1000,
+  iter = 2000,
+  chains = 4,
+  backend = "cmdstanr",
+  file = here::here("mods","b_ln")
+)
+
+summary(b_ln)
+
+prior_summary(b_ln)
+summary(b_ln)
+
+library(brms)
+library(splines)
+
+listout <- readRDS(here::here("mods","listout"))
+modmc_wt_priorStrong <- brm(
+  anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
+  data = d1p,
+  prior = c(
+    prior(normal(0, .1), class = Intercept),
+    prior(normal(-.1,.1), class = b)),
+  seed = 1234,
+  warmup = 1000,
+  iter = 2000,
+  chains = 4,
+  backend = "cmdstanr",
+  file = here::here("mods","modmc_wt_priorStrong")
+)
+
+
+##### TeST PRIORS
+modmc_wt_priorStrong_TEST <- brm(
+  anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
+  data = d1p,
+  prior = c(
+    prior(normal(0, .1), class = Intercept),
+    prior(normal(-.1,.1), class = b)),
+  seed = 1234,
+  warmup = 1000,
+  iter = 2000,
+  chains = 4,
+  sample_prior = "only",
+  backend = "cmdstanr"#,
+ # file = here::here("mods","modmc_wt_priorStrong")
+)
+#saveRDS(modmc, here::here("mods", "modmc.rds"))
+summary(modmc_wt_prior)
+prior_summary(modmc_wt_prior)
+summary(modmc_wt_priorStrong)
+
+## WEAK PRIOR
+modmc_wt_prior_weak <- brm(
+  anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
+  data = d1p,
+  prior = c(prior(normal(0, 1), class = b)),
+  seed = 1234,
+  warmup = 1000,
+  iter = 2000,
+  chains = 4,
+  sample_prior = "only",
+  backend = "cmdstanr"#,
+ # file = here::here("mods","modmc_wt_prior")
+)
+```
+
+```
+
+
+
+
 
 ### Checks:
 
 ```{r}
 # YES
-pp_check(m1)
+pp_check(b_ln)
 ```
 
 Trace plots:
 
 ```{r, cache = TRUE}
-mcmc_plot(m1,
+mcmc_plot(b_ln,
           type = "trace")
 ```
 
@@ -959,12 +1174,87 @@ mcmc_plot(m1,
 
 ```{r}
 set.seed(1234)
-y<- rnorm(1000,0,1)
-a<- rnorm(1000,0,1)
-s<- rnorm(1000, a -(2*y),4)
+n <- 10000 # n
+a <- rnorm(n, 0, 1) # rel service attendance
+y <- rnorm(n, -a*.2, 1) # rel service affects anxiety 
+bg <- rnorm(n, a, 1) # rel service affects belief 
+s <- rnorm(n, .2*y + .2*bg,1) # selection bias 
 
-dlbind <-data.frame(y,a,s)
-summary(lm(y ~  a + s, data = dlbind))
+dbind <-data.frame(y,a,s, bg)
+
+summary(lm(s ~  a + bg, data = dbind))
+summary(lm(s ~  a , data = dbind))
+
+
+## 
+
+set.seed(123)
+sim_fun = function() {
+n <- 10000 # n
+a <- rnorm(n, 0, 1) # rel service attendance
+y <- rnorm(n, -a*.2, 1) # rel service affects anxiety 
+l <- rnorm(n, a, 1) # rel service affects belief 
+s <- rnorm(n, .2*l - 5*y,1) # selection bias 
+
+# simulate data
+simdat <-data.frame(y, a, s, l)
+
+  sim_s <- lm(s ~ a + l, data = simdat) # belief + church
+  sim_s  # confounded 
+  summary(sim_s)
+}
+
+# Replication 1000xs
+r_lm = replicate(1000, sim_fun(), simplify = FALSE )
+
+# extract simulations
+tab_sim<-purrr::map_dfr(r_lm, broom::tidy)
+
+# extract belief coefficients
+mout<-tab_sim %>%
+  dplyr::filter(term =="l")%>%
+  dplyr::mutate_if(is.numeric, round, 5)
+
+# calculate proportion of estimates greater than 0
+# all positive
+sum(mout$estimate > 0) / length(mout$estimate)
+
+# proportion of belief coefficient p.values < .001
+sum(mout$p.value <.001) / length(mout$p.value)
+
+# extract religious service coefficients
+tout<-tab_sim %>%
+  dplyr::filter(term =="a")%>%
+  dplyr::mutate_if(is.numeric, round, 5)
+
+# calculate proportion of estimates less than 0
+# all negative
+sum(tout$estimate < 0) / length(tout$estimate)
+
+# proportion of service coefficient p.values < .001
+sum(tout$p.value <.001) / length(tout$p.value)
+```
+
+
+```{r}
+set.seed(123)
+sim_fun = function() {
+n <- 10000 # n
+a <- rnorm(n, 0, 1) # rel service attendance
+y <- rnorm(n, -a*.2, 1) # rel service affects anxiety 
+bg <- rnorm(n, a, 1) # rel service affects belief 
+s <- rnorm(n, .2*y + .2*bg,1) # selection bias 
+
+# simulate data
+simdat <-data.frame(y, a, s, bg)
+
+  sim_s <- lm(s ~  a, data = dbind) # belief + church
+  sim_s  # confounded 
+}
+
+
+
+
 ```
 
 

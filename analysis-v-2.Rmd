@@ -35,6 +35,8 @@ knitr::opts_chunk$set(#
 ```{r runanalysis, echo=FALSE, include = FALSE}
 # source("libs.R") # libraries 
 # source("funs.R") # custom functions
+
+
 library("tidyverse")
 library("easystats")
 library("ggplot2") #plots
@@ -407,7 +409,7 @@ sum(is.na(df$education))
 
 
 miss_graph<- gg_miss_upset(dff)
-
+miss_graph
 miss_graph <-image_ggplot(miss_graph)
 # save graph
 str(miss_graph)

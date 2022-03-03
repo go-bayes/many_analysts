@@ -206,9 +206,23 @@ d1 <- df %>%
                 male,
                 religious,
                 #   bg_s,
+                denomination,
                 wb_psychANXIETY)
 
 ```
+
+table
+
+```{r}
+lt <-table1::table1(~  denomination, data = d1, transpose=F)
+lt
+lt <-table1::table1(~ ch + religious + age + male + edu + ses + denomination |country, data = d1, transpose=F)
+lt
+kable(as.data.frame(lt), booktabs=TRUE, "latex")
+
+nrow(dr)
+```
+
 
 ## Causal Model: belief in God
 
@@ -587,9 +601,90 @@ dr <- d4r %>%
  
 # fine, well below 10
 max(dr$ipwCH)
+```
+
+## Tables
+
+
+```{r}
+lt <-table1::table1(~ religious|ch_ord, data = dp)
+
+kable(as.data.frame(lt), booktabs=TRUE, "latex")
+
+nrow(dr)
+```
 
 
 
+
+### Simulation
+
+```{r}
+#\begin{lstlisting}[language=R]
+
+set.seed(123)
+sim_fun_A = function() {
+  n <- 1000
+  U <- rnorm(n, 1) # Unmeasured distress 
+  A <- rnorm(n, 1) # religious service attendance,
+  M <- rnorm(n , A + U)# rel id
+  Y <- rnorm(n , - A*.2 + U + M*.1) #  distress reduced by attendance.
+  
+# Religious id, caused by attendance + distress
+
+# simulate data
+simdat_A <- data.frame(
+  M = L, # rel id
+  A = A, # rel service
+  U = U, # distressing events (unmeasured)
+  Y = Y ) # outcome
+
+sim_A <- lm(Y ~ A + M, data = simdat_A)
+sim_A
+}
+
+# Replicate including the mediator
+r_lm_A <- NA
+r_lm_A = replicate(100, sim_fun_A(), simplify = FALSE )
+
+
+# average over outcomes: effect of religion is attenuated
+parameters::pool_parameters(r_lm_A)
+
+## Repeat but with no mediator in model
+set.seed(123)
+sim_fun_B = function() {
+  n <- 1000
+  U <- rnorm(n, 1) # Unmeasured distress 
+  A <- rnorm(n, 1) # religious service attendance,
+  M <- rnorm(n , A + U)# rel id + distress
+  Y <- rnorm(n , - A *.2 + U + M*.1) #  distress reduced by attendance.
+  
+# simulate data
+simdat_B <- data.frame(
+  M = L, # rel id
+  A = A, # rel service
+  U = U, # distressing events (unmeasured)
+  Y = Y ) # outcome
+
+# Only exposure
+sim_B <- lm(Y ~ A, data = simdat_A)
+sim_B
+}
+
+# Replication 1000xs
+r_lm_B <- NA
+r_lm_B = replicate(100, sim_fun_B(), simplify = FALSE )
+
+# average over outcomes: effect of religion is attenuated
+parameters::pool_parameters(r_lm_B)
+
+#\end{lstlisting}
+```
+
+
+
+```{r}
 dr$ch_ord <- factor(dr$ch, ordered=TRUE)
 table(dr$ch_ord)
 
@@ -722,17 +817,17 @@ plot_grand_mean_ordR <- ggplot(grand_mean_autonomy_distR,
          legend.title = element_text(size = 12),
           legend.text = element_text(size = 8)) 
 
-plot_grand_mean_ameR + plot_grand_mean_ordR + plot_annotation(tag_levels = "a",  title = "Religious only model")
+graph_r<- plot_grand_mean_ameR + plot_grand_mean_ordR + plot_annotation(tag_levels = "a",  title = "Religious only model")
 yola
 
 
 ggsave(
-  plot_grand_mean_ameR,
+  graph_r,
   path = here::here("figs"),
   width = 12,
   height = 6,
   units = "in",
-  filename = "plot_grand_mean_ameR.jpg",
+  filename = "graph_r.jpg",
   device = 'jpeg',
   limitsize = FALSE,
   dpi = 1200
@@ -1014,6 +1109,25 @@ modmc_wt_priorStrong <- brm(
   backend = "cmdstanr",
   file = here::here("mods","modmc_wt_priorStrong")
 )
+
+
+## Table
+parameters::parameters(
+  modmc_wt_priorStrong,
+  test = "pd",
+  component = "all",
+  priors = FALSE, 
+  ci_method = "hdi",
+#  effects = "fixed",
+  group_level = FALSE,
+  diagnostic = "Rhat") %>%
+    mutate_if(is.numeric, ~ round(., 3)) %>%
+    mutate_all(funs(str_replace(., "b_", ""))) %>%
+    mutate_all(funs(str_replace(., "bs", ""))) %>%
+    kable(booktabs = T, "latex", caption =  "Parameter estimates for continuous (spline) model of religious service on anxiety") %>%
+    print()
+
+
 
 # prior summary
 
@@ -1339,8 +1453,48 @@ church_plot <-plot(ggeffects::ggemmeans(b_or, terms = "ch_ord")) +   xlab("Servi
 subtitle = "Inverse Probability Weighting") + scale_y_continuous(limits = c(-.5,.5))+ 
   theme_classic()
 church_plot
+```
+
+## Tables
+
+```{r}
+# tab_or <- model_parameters(b_or,   verbose = F, ci_method = "hdi",test = c("pd"))
+# kbl(tab_or, "latex",booktabs=T)
+
+# sjstats::tidy_stan(tab_or)
+
+# library(broom.mixed)
+# tidy(
+#   b_or,
+#  # parameters = NA,
+#   effects = c("fixed", "ran_pars"),
+#   robust = FALSE,
+#   conf.int = TRUE,
+#   conf.level = 0.95,
+#   conf.method = c("HPDinterval"),
+#   fix.intercept = TRUE
+# )
+
+parameters::parameters(
+  b_or,
+  test = "pd",
+  component = "all",
+  priors = FALSE, 
+  ci_method = "hdi",
+#  effects = "fixed",
+  group_level = FALSE,
+  diagnostic = "Rhat") %>%
+    mutate_if(is.numeric, ~ round(., 3)) %>%
+    mutate_all(funs(str_replace(., "b_", ""))) %>%
+    mutate_all(funs(str_replace(., "_moch", ""))) %>%
+    kable(booktabs = T, "latex", caption =  "Parameter estimates for model of religious service on anxiety") %>%
+    print()
+```
 
 
+
+
+```{r}
 # pord<-brms::conditional_effects(b_or, "ch_ord", 
 #                               spaghetti = T,
 #                               ndraws = 1000,
@@ -1444,7 +1598,33 @@ grand_mean_autonomy_dist <- b_or %>%
   epred_draws(newdata = expand_grid(ch_ord = c("never","rarely","1xpy","holydays","1xpm","1xpw",">1xpw")), 
               re_formula = NA)
 
+
+grand_mean_autonomy_dist2 <- b_or %>% 
+  epred_draws(newdata = expand_grid(ch_ord = c("never",">1xpw")), 
+              re_formula = NA)
+
+
 plot_grand_mean_ord <- ggplot(grand_mean_autonomy_dist, 
+                                   aes(x = .epred, 
+                                       fill = ch_ord)) +
+  scale_fill_okabe_ito() +
+    stat_halfeye(slab_alpha = 0.7) +
+    scale_x_continuous(limits=c(-.6,.4)) +
+  labs(x = "Predicted anxiety (standardised)", y = "Density",
+       fill = "Church frequency",
+       subtitle = "Posterior predictions: monotonic model") +
+  theme_classic() +
+     theme(legend.position = "bottom",
+         legend.title = element_text(size = 10),
+          legend.text = element_text(size = 8)) 
+
+plot_grand_mean_ord
+
+
+
+
+
+plot_grand_mean_ord2 <- ggplot(grand_mean_autonomy_dist2, 
                                    aes(x = .epred, 
                                        fill = ch_ord)) +
   scale_fill_okabe_ito() +
@@ -1458,12 +1638,9 @@ plot_grand_mean_ord <- ggplot(grand_mean_autonomy_dist,
          legend.title = element_text(size = 12),
           legend.text = element_text(size = 8)) 
 
-plot_grand_mean_ord
+plot_grand_mean_ord2
 
 
-
-plot_result_ord <- plot_grand_mean_ame + plot_grand_mean_ord+  plot_annotation(tag_levels = "a")
-plot_result_ord
 
 
 ggsave(
@@ -1479,6 +1656,23 @@ ggsave(
 )
 
 
+plot_result_ord2 <- plot_grand_mean_ame + plot_grand_mean_ord2+  plot_annotation(tag_levels = "a")
+plot_result_ord2
+
+
+ggsave(
+  plot_result_ord2,
+  path = here::here("figs"),
+  width = 12,
+  height = 6,
+  units = "in",
+  filename = "plot_result_ord2.jpg",
+  device = 'jpeg',
+  limitsize = FALSE,
+  dpi = 1200
+)
+
+
 plot_result_full <- (average_marginal_effect + plot_grand_mean)/
  (plot_grand_mean_ame + plot_grand_mean_ord) + plot_annotation(tag_levels = "a")
 plot_result_full
@@ -1487,13 +1681,13 @@ plot_result_full
 ggsave(
   plot_result_full,
   path = here::here("figs"),
-  width = 12,
-  height = 6,
+  width = 10,
+  height =10,
   units = "in",
   filename = "plot_result_full.jpg",
   device = 'jpeg',
   limitsize = FALSE,
-  dpi = 1200
+  dpi = 1000
 )
 
 
@@ -2490,7 +2684,7 @@ sum(tout$estimate < 0) / length(tout$estimate)
 sum(tout$p.value <.001) / length(tout$p.value)
 ```
 
-˝#\# Simulation tables
+˝## Simulation tables
 
 ```{r}
 parameters::parameters(

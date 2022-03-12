@@ -981,7 +981,7 @@ dag1 <- image_ggplot(image_read(here::here("figs","dg_1.tiff")),
 dag1
 dag2 <- image_ggplot(image_read(here::here("figs","dg_2.tiff")), interpolate = T)
 dag2
-dag3 <- image_ggplot(image_read(here::here("figs","dg_3.tiff")), interpolate = T)
+dag3 <- image_ggplot(image_read(here::here("figs","dag_3.tiff")), interpolate = T)
 dag3
 dag4 <- image_ggplot(image_read(here::here("figs","dg_4.tiff")),
                      interpolate = T)

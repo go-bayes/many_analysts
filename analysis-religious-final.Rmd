@@ -20,7 +20,9 @@ editor_options:
   chunk_output_type: console
 ---
 
+
 ```{r global_options, echo=FALSE, include = FALSE}
+# setup
 knitr::opts_chunk$set(#
   fig.path="Figs/", 
   message=FALSE, 
@@ -34,8 +36,7 @@ knitr::opts_chunk$set(#
 
 ```{r runanalysis, echo=FALSE, include = FALSE}
 # source("libs.R") # libraries 
-# source("funs.R") # custom functions
-library("tidyverse")
+# source("funs.R") # custom functions, not used
 library("easystats")
 library("ggraph")
 library("lme4")
@@ -61,19 +62,29 @@ library("ipw") # inverse probability weighting.
 library("WeightIt")# inverse probability weighting. 
 library("emmeans")
 library("splines")
+library("magick")
+library("tidyverse")
+library("Amelia")
+library("mice")
+
+
+# Bayes options
 rstan_options(auto_write=TRUE)
 options(mc.cores=parallel::detectCores ())
 theme_set(theme_few())
 cite_packages(include_R = TRUE)
 
-citation("daggity")
-toBibtex(citation("ggdag"))
-print(citation("EValue") , bibtex=TRUE)
+# citations
+# citation("daggity")
+# toBibtex(citation("ggdag"))
+# print(citation("EValue") , bibtex=TRUE)
 ```
 
-## Workflow and analysis
 
 First, we import the data (see functions). [@tchetgen2012]
+
+
+## Data import and set up
 
 ```{r}
 # import data
@@ -83,11 +94,10 @@ d <- as.data.frame(
 )
 ```
 
-```{r cache = TRUE}
-# clean data:use informative names !
-# note from Suzanne: 
-# I do think it's actually a negative relation, as the anxiety item was reverse-coded (following the documentation from the WHO quality of life scale, from which the items were taken). This is indicated in the data documentation, but I can totally understand this got buried under all information that was provided. We tried to make the dataset as clean as possible since most teams just aggregated all well-being items (and the religiosity items). But in retrospect, this recoding did cause some confusion for a couple of teams that used only specific items (and prefered the ordinal scale). This is definitely something to take into account for future projects like this one. 
 
+
+```{r cache = TRUE}
+# clean data:use informative names
 df <- d %>%
   dplyr::mutate(male2 = ifelse(gender != "man", 1 , 2)) %>% # for index categorical variable, not change of meaning for gender. male and people who do not identify as male.
   dplyr::mutate(male = factor(ifelse(gender != "man", "male" , "notmale"))) %>%
@@ -144,23 +154,12 @@ df <- d %>%
       "1" = "religious"
     )
   )
-max(df$rel_EXTENTBELIEVEGOD)
-max(df$rel_CHURCHFREQ)
-length(unique(df$country))
-table(df$country)
 ```
 
 ```{r}
-# get data into shape
-
+# get data into shap
 d1 <- df %>%
   dplyr::filter(
-   #  !is.na(wb_psychANXIETY),
-   #  !is.na(age),
-   #  !is.na(rel_CHURCHFREQ),
-   # # !is.na(wb_psychMEANING),
-   #  !is.na(male),
-   #  !is.na(rel_EXTENTBELIEVEGOD),
   ) %>%
   dplyr::mutate(
     anx = as.integer(6- wb_psychANXIETY), # reverse coded! rescale 1-5
@@ -168,29 +167,19 @@ d1 <- df %>%
     #put outcome in ST units (see McElreath 2021)  # not necessary
     #age_s = scale(age),
     ch = rel_CHURCHFREQ,
-  #  mn  = wb_psychMEANING,
     edu = education,
     bg =  rel_EXTENTBELIEVEGOD#,
-  #  ch_s = scale(rel_CHURCHFREQ),
-  #  mn_s = scale(wb_psychMEANING),
-   # bg_s = scale(rel_EXTENTBELIEVEGOD)
   ) %>%
   dplyr::select(anx,
                 ch,
                 age,
                 ses,
-                #    mn,
                 edu,
                 bg,
-                # anx_s,
-                # age_s,
-                #  ch_s,
-                #  mn_s,
                 edu,
                 country,
                 male,
                 religious,
-                #   bg_s,
                 denomination,
                 wb_psychANXIETY)
 
@@ -200,12 +189,10 @@ table
 
 ```{r}
 lt <-table1::table1(~  denomination, data = d1, transpose=F)
-lt
 lt <-table1::table1(~ ch + religious + age + male + edu + ses + denomination |country, data = d1, transpose=F)
 lt
+# Table for LaTeX
 kable(as.data.frame(lt), booktabs=TRUE, "latex")
-
-nrow(dr)
 ```
 
 
@@ -240,30 +227,6 @@ dg1a <- dagify(
 dg1a
 print( impliedConditionalIndependencies( dg1a ) )
 print( adjustmentSets( dg1a,  "belief","anx" ) )
-
-# 
-# d0a <-ggdag::ggdag(dg1a, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("What if we were to assume distressing events increase belief in God?")
-# d0a
-# # graph adjustment sets
-# 
-# d1a<-ggdag::ggdag_adjustment_set(dg1a, node_size = 14, text = FALSE, use_labels = "label") +
-#   theme(legend.position = "bottom") +
-#   theme_dag() + ggtitle("If we assume distressing events affect belief and service we cannot estimate causal effects ")
-# 
-# d1a 
-# 
-# 
-# # 
-# dp0 <-ggdag::ggdag(dg1, text = FALSE, use_labels = "label")  + theme_dag() + ggtitle("Assumed unmeasured causal effects of distressing experiences")
-# 
-# dp0
-# # # graph adjustment sets
-# # 
-# #dp1<-ggdag::ggdag_adjustment_set(dg1, node_size = 14, text = FALSE, use_labels = "label") +
-# #   theme(legend.position = "bottom") +
-# #   theme_dag() + ggtitle("Adjustment sets for Belief in God")
-# #dp1
-# dp0
 ```
 '
 We adjust for: { church, country, male, ses } . Because we do not have information about education, we condition on the ladder
@@ -302,19 +265,8 @@ dg2 <- dagify(
 print( impliedConditionalIndependencies( dg2 ) )
 print( adjustmentSets( dg1a,  "church", "anx" ) )
 
-# 
-# ggdag::ggdag(dg2) + theme_dag()
-# 
-# nocause <- ggdag::ggdag(dg2, text = FALSE, use_labels = "label")  + theme_dag() + labs(title = "Assume unmeasured distressing experience does not affect Belief or Service")
-# nocause
-# 
-# dg0<-ggdag::ggdag_adjustment_set(dg2, node_size = 14, text = FALSE, use_labels = "label") +
-#   theme(legend.position = "bottom") +
-#   theme_dag() + ggtitle("Adjustment set for religious service
-# assuming service does not change from distress")
-# 
-# dp0
-# 
+
+## Dag
 
 dpz <- dagify(
   anx  ~ age + belief + church + male + country + ses,
@@ -340,9 +292,7 @@ dpz <- dagify(
   )
 )
 
-ggdag::ggdag(dpz) + theme_dag()
-# 
-# 
+
 # # graph adjustment sets
 dg1<-ggdag::ggdag_adjustment_set(dpz, node_size = 14, text = FALSE, use_labels = "label") +
   theme(legend.position = "bottom") +
@@ -354,87 +304,33 @@ dg1
 
 We have two adjustment sets: { age, church, country, male, ses } and { church, country, edu, male, ses }
 
-
-<!-- ```{r dg1, eval=FALSE} -->
-<!-- # save graph -->
-<!-- ggsave( -->
-<!--   dg1, -->
-<!--   path = here::here("Figs"), -->
-<!--   width = 10, -->
-<!--   height = 5, -->
-<!--   units = "in", -->
-<!--   filename = "dag_belief.jpg", -->
-<!--   device = 'jpeg', -->
-<!--   limitsize = FALSE, -->
-<!--   dpi = 1200 -->
-<!-- ) -->
-
-<!-- ``` -->
-
-
-<!-- ```{r dp0, eval=FALSE} -->
-<!-- # save graph -->
-<!-- ggsave( -->
-<!--   dg1, -->
-<!--   path = here::here("Figs"), -->
-<!--   width = 10, -->
-<!--   height = 5, -->
-<!--   units = "in", -->
-<!--   filename = "dag_church.jpg", -->
-<!--   device = 'jpeg', -->
-<!--   limitsize = FALSE, -->
-<!--   dpi = 1200 -->
-<!-- ) -->
-
-<!-- ``` -->
-
 ## Multiple imputation 
 
+Missing data can introduce selection bias. 
 
-
-
-
-### Visualise missing data
-
-
-Next we need to examine patterns of missing-ness, which might spoil inference.
+We examine patterns of missingness and find substantial missingness in denominations
 
 ```{r cache = TRUE}
 library("naniar")
-library(magick)
 vis_miss(df) # substantial pattern of missingness in a few variables, 
-df
-df$wb_soc_3
-dff<-df%>%
-  select(-wb_soc_3)
+
+# save missing file -- this does not work
+# ggsave(miss_graph,
+#   path = here::here("figs"),
+#   width = 16,
+#   height = 9,
+#   units = "in",
+#   filename = "miss_graph.jpg",
+#   device = 'jpeg',
+#   limitsize = FALSE,
+#   dpi = 1200
+# )
+```
+
+## Impute missing data
 
 
-
-
-
-
-miss_graph<- gg_miss_upset(dff)
-miss_graphR <-image_ggplot(miss_graph)
-# save graph
-miss_graph
-
-
-ggsave(miss_graph,
-  path = here::here("figs"),
-  width = 16,
-  height = 9,
-  units = "in",
-  filename = "miss_graph.jpg",
-  device = 'jpeg',
-  limitsize = FALSE,
-  dpi = 1200
-)
-
-
-library(Amelia)
-
-
-  # x is the longitudional dataframe (here 'd_3')
+```{r cache = TRUE}
 set.seed(1234)
 prep <- d1 %>% # Remove what we do not need anymore
     arrange(country) %>%
@@ -450,23 +346,11 @@ prep <- d1 %>% # Remove what we do not need anymore
                   ses)
 
 
-
-table1::table1(~ ch |religious, data = d1)
-
-
+# check
+#table1::table1(~ ch |religious, data = d1)
 ```
 
-
-We find there is substantial missingness in denomination. There is also missingness in ethnicity. Overall missingness is low in other indicators. However, 
-Because missingness can introduce bias, we multiply impute responses. 
-
-
-
-## Model for belief 
-
-
-### Marginal structural model Church
-
+## Impute missingness 
 
 ```{r}
 library(mice)
@@ -476,6 +360,7 @@ d2<-mice(d1)
 #d3<-complete(d2)
 #saveRDS(d3,here::here("mods","d3"))
 #d3 <-readRDS(here::here("mods","d3"))
+
 d4<-d3%>%
   select(anx, ch, bg, age, edu,male,ses,country,religious)%>%
   drop_na()%>%
@@ -489,36 +374,36 @@ d4<-d3%>%
          male_2 =scale(as.numeric(male))/2,
          ses_s = scale(ses),
          country=as.factor(country))
+```
 
+
+Imputation of the religion only dataset
+```{r}
 ## MICE ONLY RELIGIOUS
-table(d1$religious)
-
-
-# Check
 d1r<- d1 %>%
   filter(religious == 3)
 
 hist(d1r$ch)
 
+# save
+# saveRDS(d1p, here::here(
+#   "mods","d1p"
+# ))
+
 d2r<-mice(d1r)
-
-#check religious rumbers (1= religious, 2= not religious, 3=atheist) [R] So note that 3 = religious!!
-
-
-
-
 
 d3r<-complete(d2r)
 
-
-
+# Save data 
 #saveRDS(d3,here::here("mods","d3r"))
 #saveRDS(d3r,here::here("mods","d3r"))
 
+# read data
 d3 <-readRDS(here::here("mods","d3"))
 d3r <-readRDS(here::here("mods","d3r"))
 
 
+# Select variables 
 d4<-d3%>%
   select(anx, ch, bg, age, edu,male,ses,country,religious)%>%
   drop_na()%>%
@@ -546,9 +431,11 @@ d4r<-d3r%>%
          male_2 =scale(as.numeric(male))/2,
          ses_s = scale(ses),
          country=as.factor(country))
+```
 
+Create inverse probability weights
 
-
+```{r}
 library(ipw)
 
 
@@ -565,8 +452,8 @@ d1p <- d4 %>%
   mutate(ipwCH = dch$weights.trunc)
 
  
-
-max(d1p$ipwCH)
+# check max value
+#max(d1p$ipwCH)
 
 
 # weighted for religious only
@@ -583,9 +470,8 @@ dchr <- ipw::ipwpoint(
 dr <- d4r %>% 
   mutate(ipwCH = dchr$weights.trunc)
 
- 
 # fine, well below 10
-max(dr$ipwCH)
+#max(dr$ipwCH)
 ```
 
 ## Tables
@@ -593,81 +479,13 @@ max(dr$ipwCH)
 
 ```{r}
 lt <-table1::table1(~ religious|ch_ord, data = dp)
-
+lt
 kable(as.data.frame(lt), booktabs=TRUE, "latex")
-
-nrow(dr)
 ```
 
 
 
-
-### Simulation
-
-```{r}
-#\begin{lstlisting}[language=R]
-
-set.seed(123)
-sim_fun_A = function() {
-  n <- 1000
-  U <- rnorm(n, 1) # Unmeasured distress 
-  A <- rnorm(n, 1) # religious service attendance,
-  M <- rnorm(n , A + U)# rel id
-  Y <- rnorm(n , - A*.2 + U + M*.1) #  distress reduced by attendance.
-  
-# Religious id, caused by attendance + distress
-
-# simulate data
-simdat_A <- data.frame(
-  M = L, # rel id
-  A = A, # rel service
-  U = U, # distressing events (unmeasured)
-  Y = Y ) # outcome
-
-sim_A <- lm(Y ~ A + M, data = simdat_A)
-sim_A
-}
-
-# Replicate including the mediator
-r_lm_A <- NA
-r_lm_A = replicate(100, sim_fun_A(), simplify = FALSE )
-
-
-# average over outcomes: effect of religion is attenuated
-parameters::pool_parameters(r_lm_A)
-
-## Repeat but with no mediator in model
-set.seed(123)
-sim_fun_B = function() {
-  n <- 1000
-  U <- rnorm(n, 1) # Unmeasured distress 
-  A <- rnorm(n, 1) # religious service attendance,
-  M <- rnorm(n , A + U)# rel id + distress
-  Y <- rnorm(n , - A *.2 + U + M*.1) #  distress reduced by attendance.
-  
-# simulate data
-simdat_B <- data.frame(
-  M = L, # rel id
-  A = A, # rel service
-  U = U, # distressing events (unmeasured)
-  Y = Y ) # outcome
-
-# Only exposure
-sim_B <- lm(Y ~ A, data = simdat_A)
-sim_B
-}
-
-# Replication 1000xs
-r_lm_B <- NA
-r_lm_B = replicate(100, sim_fun_B(), simplify = FALSE )
-
-# average over outcomes: effect of religion is attenuated
-parameters::pool_parameters(r_lm_B)
-
-#\end{lstlisting}
-```
-
-
+Relable variables
 
 ```{r}
 dr$ch_ord <- factor(dr$ch, ordered=TRUE)
@@ -678,13 +496,14 @@ levels(dr$ch_ord)<-c("never","rarely","1xpy","holydays","1xpm","1xpw",">1xpw")
 levels(dr$ch_ord)
 is.ordered(dr$ch_ord)
 
+# save
 #saveRDS(dr, here::here("mods","dr"))
+```
 
-# saveRDS(d1p, here::here(
-#   "mods","d1p"
-# ))
+Bayesian model with strong priors
 
 
+```{r}
 b_orR <- brm(
   anx_s|weights(ipwCH) ~ mo(ch_ord) + (1 + mo(ch_ord) | country),
   data = dr,
@@ -709,7 +528,13 @@ church_plot_R <-plot(ggeffects::ggemmeans(b_or, terms = "ch_ord")) +   xlab("Ser
 subtitle = "Inverse Probability Weighting") + scale_y_continuous(limits = c(-.5,.5))+ 
   theme_classic()
 church_plot_R
+```
 
+
+Graphs
+
+
+```{r}
 ### EEMEANS
  b_orR %>% 
   emmeans(~ ch_ord,
@@ -819,19 +644,13 @@ ggsave(
 )
 
 
-
-
-
-
 ```
 
-## include religion 
+##  Gee models of various sorts
 
 
 ```{r}
 library(splines)
-
-
 ipb_ch_ln_no_mediation <- geeglm(
   anx_s ~ ch,
   data = d1p,
@@ -860,10 +679,6 @@ model_parameters(ipb_ch_ln_no_mediation)
 plot(ggeffects::ggemmeans(ipb_ch_ln_mediation, terms = "ch"), add.data = TRUE)
 
 
-
-
-
-
 ipb_ch<- geeglm(
   anx_s ~  bs(ch),
   data = d1p,  
@@ -877,10 +692,7 @@ model_parameters(ipb_ch)
 plot(ggeffects::ggemmeans(ipb_ch, terms = "ch[all]"), add.data = TRUE
      )
 
-
-
-## Rel only 
-
+# splines
 library(splines)
 ipb_ch_lnR<- geeglm(
   anx_s ~ ch,
@@ -908,23 +720,15 @@ model_parameters(ipb_chR)
 plot(ggeffects::ggemmeans(ipb_chR, terms = "ch[all]"), add.data = TRUE
      )
 
-
-
-
-# model_parameters(ipb_bg)
-
-
 abs(min(d1p$ch_s) - max(d1p$ch_s))
 # 3.064032
 
 # sensitivity
 evalues.OLS(0.04, se = 0.01, sd = 1, delta = 1.4)
-
 bias_plot(1.3009531, xmax = 6)
 
 
-### Religous Only 
-
+### Religious Only 
 
 library(splines)
 r_gee <- geeglm(
@@ -965,75 +769,10 @@ evalues.OLS(0.2238435, se = 0.01, sd = 1, delta = 1.4)
 ```
 
 
-Adjusted GEE no weights
+### Bayesian Stratified Regression 
 
-```{r}
-# 
-# ipb_bg_noweights <- geeglm(
-#   anx_s ~ bg_s + ch_s + age_s + edu_s + male_2 + ses_s,
-#   data = d1p,  
-#   id = country,
-#   corstr = "exchangeable"
-# )
-# saveRDS(ipb_bg_noweights, here::here("mods","ipb_bg_noweights"))
-# 
+Not used
 
-ipb_ch_noweights <- geeglm(
-  anx_s ~ bs(ch_s) + age_s + edu_s + male_2 + ses_s,
-  data = d1p,  
-  id = country,
-  corstr = "exchangeable"
-)
-saveRDS(ipb_ch_noweights, here::here("mods","ipb_ch_noweights"))
-
-
-msm_lmer <- lmer(
-  anx_s ~ bs(ch_s) + age_s + edu_s + male_2 + ses_s +  (1+ ch_s|country),
-  data = d1p, 
-)
-saveRDS(msm_lmer, here::here("mods","msm_lmer"))
-
-
-
-msm_lmer_wg <- lmer(
-  anx_s ~ bs(ch_s) + (1 + ch_s|country),
-  weights = ipwCH,
-  data = d1p
-)
-saveRDS(msm_lmer_wg, here::here("mods","msm_lmer_wg"))
-
-
-# model_parameters(ipb_bg_noweights)
-# model_parameters(ipb_bg_noweights)
-# model_parameters(ipb_bg)
-# model_parameters(ipb_bg)
-
-model_parameters(ipb_ch_noweights)
-model_parameters(ipb_ch)
-model_parameters(ipb_ch)
-model_parameters(msm_lmer)
-model_parameters(msm_lmer_wg)
-
-
-
-pred <- ggeffects::ggemmeans(msm_lmer_wg, terms = c("ch_s[all]"))
-pred
-
-plot(pred,
-    # add.data=T,dot.alpha=.1, 
-     facets = F)  + 
-  scale_y_continuous(limits=c(-.7,.7)) + 
-  theme_classic() + ggtitle("") # title to be suppled
-
-```
-
-
-We note that the multi-level models give different estimates. 
-
-
-
-
-### Bayesian Church Attendaance
 
 ```{r}
 listout <- readRDS(here::here("mods","listout"))
@@ -1049,11 +788,11 @@ modmc <- brm_multiple(
   threads = threading(4)
 )
 
-#saveRDS(modmc, here::here("mods", "modmc.rds"))
 summary(modmc)
-
-
 ```
+
+
+
 ## Bayesian wieghted regression 
 
 ```{r}
@@ -1073,10 +812,17 @@ modmc_wt_linear <- brm(
 )
 #saveRDS(modmc, here::here("mods", "modmc.rds"))
 summary(modmc_wt_linear)
+```
 
+Priors used
+
+```{r}
 prior_summary(modmc_wt_linear)
-summary(modmc_wt_linear)
+```
 
+Use of strong prior and splines
+
+```{r}
 library(brms)
 library(splines)
 
@@ -1095,7 +841,6 @@ modmc_wt_priorStrong <- brm(
   file = here::here("mods","modmc_wt_priorStrong")
 )
 
-
 ## Table
 parameters::parameters(
   modmc_wt_priorStrong,
@@ -1112,13 +857,14 @@ parameters::parameters(
     kable(booktabs = T, "latex", caption =  "Parameter estimates for continuous (spline) model of religious service on anxiety") %>%
     print()
 
-
-
 # prior summary
 
-
 prior_summary(modmc_wt_priorStrong)
+```
 
+Test strong priors on non-linear model
+
+```{r}
 ##### TeST PRIORS
 modmc_wt_priorStrong_TEST <- brm(
   anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
@@ -1134,9 +880,12 @@ modmc_wt_priorStrong_TEST <- brm(
   backend = "cmdstanr",
  file = here::here("mods","modmc_wt_priorStrong")
 )
+```
 
+Test a weaker prior.
 
-## WEAK PRIOR
+```{r}
+## Weak prior
 modmc_wt_prior_weak <- brm(
   anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
   data = d1p,
@@ -1152,6 +901,7 @@ modmc_wt_prior_weak <- brm(
 ```
 
 
+## Graph
 
 ```{r, cache = TRUE}
 library(viridis)
@@ -1162,11 +912,6 @@ maxchur<- max(d1p$ch_s)
 
 # difference
 abs(maxchur-minchur)
-
-library(emmeans)
-grand_mean
-
-
 
 p0<-brms::conditional_effects(modmc_wt_priorStrong, "ch_s", 
                               spaghetti = T,
@@ -1180,79 +925,12 @@ church_plot <- plot(p0, plot = FALSE)[[1]]   +  xlab("Service attendance (standa
 subtitle = "Inverse Probability Weighting") + scale_y_continuous(limits = c(-.5,.5))+ 
   theme_classic()
 church_plot
+```
 
 
+### More graphs 
 
-
-
-
-
-
-
-ipw_gee <- plot(pred,
-    #add.data=T,dot.alpha=.1, 
-     facets = F)  + 
-  scale_y_continuous(limits=c(-.1,.1)) + xlab("Service attendance (standardised)") + ylab ("Anxiety (standardised)") + 
-  theme_classic() +labs(title = "Generalized Estimating Equations", 
-  subtitle = "Inverse Probability Weighting") + scale_y_continuous(limits = c(-.5,.5))
-ipw_gee
-church_plot
-model_plot <- ipw_gee + church_plot + church_plot_test_weak + church_plot_test_strong
-model_plot <- model_plot + plot_annotation(tag_levels = "a")
-
-model_plot
-
-ggsave(
-  model_plot,
-  path = here::here("figs"),
-  width = 10,
-  height = 5,
-  units = "in",
-  filename = "model_plot.jpg",
-  device = 'jpeg',
-  limitsize = FALSE,
-  dpi = 1200
-)
-
-
-library(brmsmargins)
-modmc_wt_priorStrong
-
-max(d1p$ch_s)#-0.8321022,2.23193
-
-
-
-h <-.001
-ames <- brmsmargins(
-  object = modmc_wt_priorStrong,
-            at = data.frame(ch_s= c(-0.8321022,2.23193)),
-            contrasts = cbind("AME x" = c(0.8321022/ h, 2.23193/ h)),
-            effects = "integrateoutRE")
-                              )
-ames$Summary
-
-
-
-ames_st <- brmsmargins(
-  object = modmc_wt_priorStrong, 
-            at = data.frame(ch_s = c(-0.8321022,2.23193)),
-            contrasts = cbind("AME x" = c(-0.8321022/ h, 2.23193/ h)),
-            effects = "integrateoutRE", CI = 0.95)
-ames_st$ContrastSummary
-knitr::kable(ames$Summary, digits = 3, "latex")
-
-
-
-
-ames_ln <- brmsmargins(
-  object = modmc_wt_linear, 
-            at = data.frame(ch_s = c(-0.8321022,2.23193)),
-            contrasts = cbind("AME x" = c(-0.8321022/ h, 2.23193/ h)),
-            effects = "integrateoutRE", CI=.95)
-ames_ln$Summary
-knitr::kable(ames$Summary, digits = 3, "latex")
-
-
+```{r, cache = TRUE}
 ### EEMEANS
  modmc_wt_priorStrong %>% 
   emmeans(~ ch_s,
@@ -1295,7 +973,6 @@ grand_mean <- modmc_wt_priorStrong %>%
                                  aes(x = ch_s, y = .epred)) +
   stat_lineribbon() +
   scale_fill_brewer(palette = "Blues") +
- # scale_fill_viridis_d(palette = "Blues") +
   labs(x = "Frequency of religious service attendance (SD)", 
        y = "Predicted anxiety (SD)",
        fill = "95 HPD interval",
@@ -1309,6 +986,8 @@ plot_grand_mean
 plot_result <- average_marginal_effect + plot_grand_mean +  plot_annotation(tag_levels = "a")
 plot_result
 
+
+## Save
 
 ggsave(
   plot_result,
@@ -1324,39 +1003,41 @@ ggsave(
 
 summary(modmc_wt_priorStrong)
 summary(modmc_wt_linear)
+#
+```
+
+Test evalues
 
 
-# 
-
-
+```{r, cache = TRUE}
 library(EValue)
 summary(ipb_ch_ln)
 summary(ipb_ch)
 summary(modmc_wt_linear)
 
 # sensitivity = Church
-#yola
 
+# Obtain standard error 
 #SE = (upper limit – lower limit) / 3.92.
 
 ta <- effect_draws_cn %>% mean_hdi() 
-ta
-(ta$.upper - ta$.lower)/3.92 # 
 
+(ta$.upper - ta$.lower)/3.92 #
+```
 
+Evalue
 
+```{r, cache = TRUE}
 evalues.OLS(-0.147 , se = 0.05607611, sd = 1, delta = 1.1)
 # 
 #              point     lower     upper
 # RR       0.8631671 0.7734115 0.9633389
 # E-values 1.5870732        NA 1.2368137
+```
 
+Bias plot
 
-
-# multibias
-multi_evalue(est = RR( 0.8631671), biases = selection())
-    
-
+```{r, cache = TRUE}
 #
 bias_plot(0.8631671, xmax=5)
 
@@ -1365,7 +1046,6 @@ multi_bound(multi_bias(confounding()),
 ```
 
 
-## Scaled 0-1
 
 ```{r, cache = TRUE}
 d1p<-readRDS(here::here("mods","d1p"))
@@ -1379,23 +1059,20 @@ dchr_sc <- ipw::ipwpoint(
   data = as.data.frame(d1p)
 )
 
-
-
-
 dp <- d1p %>% 
-  mutate(ipwCH = dchr_sc$weights.trunc)
-
+  mutate(ipwCH = dchr_sc$weights.trunc
  
 # fine, well below 10
 max(dp$ipwCH)
 
 ```
 
-# Montonic effects 
+# Montonic effects model
+
+This is the model reported in the study
 
 ```{r}
 # bayesian monotonic effects
-
 dp$ch_ord <- factor(dp$ch, ordered=TRUE)
 table(dp$ch_ord)
 
@@ -1432,8 +1109,11 @@ summary(b_or)
 
 prior_summary(b_or)
 summary(b_or)
+```
 
+## Graph ( not used)
 
+```{r}
 church_plot <-plot(ggeffects::ggemmeans(b_or, terms = "ch_ord")) +   xlab("Service attendance (standardised)") + ylab ("Anxiety (standardised)") + labs(title = "Baysian Multi-level Model",
 subtitle = "Inverse Probability Weighting") + scale_y_continuous(limits = c(-.5,.5))+ 
   theme_classic()
@@ -1442,95 +1122,63 @@ church_plot
 
 ## Tables
 
+Table usd in the publication
+
 ```{r}
-# tab_or <- model_parameters(b_or,   verbose = F, ci_method = "hdi",test = c("pd"))
-# kbl(tab_or, "latex",booktabs=T)
-
-# sjstats::tidy_stan(tab_or)
-
-# library(broom.mixed)
-# tidy(
-#   b_or,
-#  # parameters = NA,
-#   effects = c("fixed", "ran_pars"),
-#   robust = FALSE,
-#   conf.int = TRUE,
-#   conf.level = 0.95,
-#   conf.method = c("HPDinterval"),
-#   fix.intercept = TRUE
-# )
-
 parameters::parameters(
   b_or,
   test = "pd",
   component = "all",
-  priors = FALSE, 
+  priors = FALSE,
   ci_method = "hdi",
-#  effects = "fixed",
+  #  effects = "fixed",
   group_level = FALSE,
-  diagnostic = "Rhat") %>%
-    mutate_if(is.numeric, ~ round(., 3)) %>%
-    mutate_all(funs(str_replace(., "b_", ""))) %>%
-    mutate_all(funs(str_replace(., "_moch", ""))) %>%
-    kable(booktabs = T, "latex", caption =  "Parameter estimates for model of religious service on anxiety") %>%
-    print()
+  diagnostic = "Rhat"
+) %>%
+  mutate_if(is.numeric, ~ round(., 3)) %>%
+  mutate_all(funs(str_replace(., "b_", ""))) %>%
+  mutate_all(funs(str_replace(., "_moch", ""))) %>%
+  kable(booktabs = T, "latex", caption =  "Parameter estimates for model of religious service on anxiety") %>%
+  print()
 ```
 
 
-
+## Graphs used in the study
 
 ```{r}
-# pord<-brms::conditional_effects(b_or, "ch_ord", 
-#                               spaghetti = T,
-#                               ndraws = 1000,
-#                               categorical = F,
-#                               prob = .9,
-#                               method = 'fitted')
-# 
-# 
-# church_plot <- plot(pord, plot = FALSE)[[1]]   +  xlab("Service attendance (standardised)") + ylab ("Anxiety (standardised)") + labs(title = "Baysian Multi-level Model",
-# subtitle = "Inverse Probability Weighting") + scale_y_continuous(limits = c(-.5,.5))+ 
-#   theme_classic()
-# church_plot
 library(tidybayes)
-
-
 
 summary(b_or)
 ### EEMEANS
- b_or %>% 
-  emmeans(~ ch_ord,
-          at = list(ch_ord = c("never",">1xpw"),
-                    country = NA),
-          epred = TRUE) %>% 
-  contrast(method = "revpairwise") 
- 
-
+b_or %>%
+  emmeans( ~ ch_ord,
+           at = list(ch_ord = c("never", ">1xpw"),
+                     country = NA),
+           epred = TRUE) %>%
+  contrast(method = "revpairwise")
 
  
 
-  
-  effect_draws <-  b_or %>% 
-  emmeans(~ ch_ord,
-         at = list(ch_ord = c("never",">1xpw"),
-                    country = NA),
-          epred = TRUE) %>% 
+
+
+effect_draws <-  b_or %>%
+  emmeans( ~ ch_ord,
+           at = list(ch_ord = c("never", ">1xpw"),
+                     country = NA),
+           epred = TRUE) %>%
   contrast(method = "revpairwise") %>%
   gather_emmeans_draws()
 
-     
-
-
-
 # linear model, for EVALUES
-effect_draws_or <-  b_or %>% 
-  emmeans(~ ch_ord,
-         at = list(ch_ord = c("never",">1xpw"),
-                    country = NA),
-          epred = TRUE) %>%
-  contrast(method = "revpairwise") %>% 
+effect_draws_or <-  b_or %>%
+  emmeans( ~ ch_ord,
+           at = list(ch_ord = c("never", ">1xpw"),
+                     country = NA),
+           epred = TRUE) %>%
+  contrast(method = "revpairwise") %>%
   gather_emmeans_draws()
 effect_draws_or
+
 # marginal mean 
 effect_draws_or %>% mean_hdi() 
 
@@ -1541,6 +1189,11 @@ effect_draws_or %>% mean_hdi()
 # 
 # summary(b_or)
 # se(effect_draws_ln$.value)
+```
+
+## Graph used in the study
+
+```{r}
 library(tidybayes)
 library(ggokabeito)   # Neat accessible color palette
 # emmeans()-based difference across autonomy
@@ -1565,20 +1218,6 @@ plot_grand_mean_ame <- ggplot(grand_mean_ame,
 plot_grand_mean_ame
 
 
-# plot_grand_mean <- ggplot(grand_mean, 
-#                                  aes( x = .epred, fill=(ch_ord))) +
-#   scale_fill_brewer(palette = "Blues") +
-#     stat_halfeye(slab_alpha = 0.8) +
-# 
-#   labs(x = "Church attendence frequency", 
-#        y = "Marginal Density",
-#        fill = "") +
-#   theme_classic() +
-#   theme(legend.position = "top")
-# 
-# plot_grand_mean
-
-
 grand_mean_autonomy_dist <- b_or %>% 
   epred_draws(newdata = expand_grid(ch_ord = c("never","rarely","1xpy","holydays","1xpm","1xpw",">1xpw")), 
               re_formula = NA)
@@ -1589,45 +1228,52 @@ grand_mean_autonomy_dist2 <- b_or %>%
               re_formula = NA)
 
 
-plot_grand_mean_ord <- ggplot(grand_mean_autonomy_dist, 
-                                   aes(x = .epred, 
-                                       fill = ch_ord)) +
+
+plot_grand_mean_ord <- ggplot(grand_mean_autonomy_dist,
+                              aes(x = .epred,
+                                  fill = ch_ord)) +
   scale_fill_okabe_ito() +
-    stat_halfeye(slab_alpha = 0.7) +
-    scale_x_continuous(limits=c(-.6,.4)) +
-  labs(x = "Predicted anxiety (standardised)", y = "Density",
-       fill = "Church frequency",
-       subtitle = "Posterior predictions: monotonic model") +
+  stat_halfeye(slab_alpha = 0.7) +
+  scale_x_continuous(limits = c(-.6, .4)) +
+  labs(
+    x = "Predicted anxiety (standardised)",
+    y = "Density",
+    fill = "Church frequency",
+    subtitle = "Posterior predictions: monotonic model"
+  ) +
   theme_classic() +
-     theme(legend.position = "bottom",
-         legend.title = element_text(size = 10),
-          legend.text = element_text(size = 8)) 
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8)
+  )
 
 plot_grand_mean_ord
 
-
-
-
-
-plot_grand_mean_ord2 <- ggplot(grand_mean_autonomy_dist2, 
-                                   aes(x = .epred, 
-                                       fill = ch_ord)) +
+plot_grand_mean_ord2 <- ggplot(grand_mean_autonomy_dist2,
+                               aes(x = .epred,
+                                   fill = ch_ord)) +
   scale_fill_okabe_ito() +
-    stat_halfeye(slab_alpha = 0.7) +
-    scale_x_continuous(limits=c(-.6,.4)) +
-  labs(x = "Predicted anxiety (standardised)", y = "Density",
-       fill = "Church frequency",
-       subtitle = "Posterior predictions: monotonic model") +
+  stat_halfeye(slab_alpha = 0.7) +
+  scale_x_continuous(limits = c(-.6, .4)) +
+  labs(
+    x = "Predicted anxiety (standardised)",
+    y = "Density",
+    fill = "Church frequency",
+    subtitle = "Posterior predictions: monotonic model"
+  ) +
   theme_classic() +
-     theme(legend.position = "bottom",
-         legend.title = element_text(size = 12),
-          legend.text = element_text(size = 8)) 
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 8)
+  )
 
 plot_grand_mean_ord2
 
 
 
-
+# Save plot
 ggsave(
   plot_result_ord,
   path = here::here("figs"),
@@ -1643,6 +1289,7 @@ ggsave(
 
 plot_result_ord2 <- plot_grand_mean_ame + plot_grand_mean_ord2+  plot_annotation(tag_levels = "a")
 plot_result_ord2
+
 
 
 ggsave(
@@ -1674,10 +1321,11 @@ ggsave(
   limitsize = FALSE,
   dpi = 1000
 )
+```
 
+More evalues 
 
-
-
+```{r}
 # Obtain evalues
 
 # marginal mean 
@@ -1735,14 +1383,20 @@ b_ord_test_weak_priors <- brm(
 
 
 
-plot_ord_wk_priors<-brms::conditional_effects(b_ord_test_weak_priors, "ch_ord", 
-                              spaghetti = T,
-                              ndraws = 1000,
-                              categorical = F,
-                              prob = .95,
-                              method = 'fitted')
 
-test_or_wk<- plot(plot_ord_wk_priors, plot = FALSE)[[1]]   +  xlab("Service attendance (monotonic)") + ylab ("Anxiety (standardised)") + labs(title = "Check Priors: Baysian Mixed Effects Marginal Model", subtitle = "Sampling from weak priors only (ordinal) ") + scale_y_continuous(limits = c(-20,15))+ 
+plot_ord_wk_priors <-
+  brms::conditional_effects(
+    b_ord_test_weak_priors,
+    "ch_ord",
+    spaghetti = T,
+    ndraws = 1000,
+    categorical = F,
+    prob = .95,
+    method = 'fitted'
+  )
+
+test_or_wk <-
+  plot(plot_ord_wk_priors, plot = FALSE)[[1]]   +  xlab("Service attendance (monotonic)") + ylab ("Anxiety (standardised)") + labs(title = "Check Priors: Baysian Mixed Effects Marginal Model", subtitle = "Sampling from weak priors only (ordinal) ") + scale_y_continuous(limits = c(-20, 15)) +
   theme_classic()
 test_or_wk
 
@@ -1769,24 +1423,30 @@ b_cont_test_st_priors <- brm(
 )
 
 
-con_st_priors<-brms::conditional_effects(b_cont_test_st_priors, "ch_s", 
-                              spaghetti = T,
-                              ndraws = 1000,
-                              categorical = F,
-                              prob = .95,
-                              method = 'fitted')
 
-test_con_st<- plot(con_st_priors, plot = FALSE)[[1]]   +  xlab("Service attendance (sd)") + ylab ("Anxiety (standardised)") + labs(title = "Check Priors: Baysian Mixed Effects Marginal Model", subtitle = "Sampling from weak priors only (continuous) ") +   scale_y_continuous(limits = c(-10,10))+  
+con_st_priors <-
+  brms::conditional_effects(
+    b_cont_test_st_priors,
+    "ch_s",
+    spaghetti = T,
+    ndraws = 1000,
+    categorical = F,
+    prob = .95,
+    method = 'fitted'
+  )
+
+test_con_st <-
+  plot(con_st_priors, plot = FALSE)[[1]]   +  xlab("Service attendance (sd)") + ylab ("Anxiety (standardised)") + labs(title = "Check Priors: Baysian Mixed Effects Marginal Model", subtitle = "Sampling from weak priors only (continuous) ") +   scale_y_continuous(limits = c(-10, 10)) +
   theme_classic()
 
 
 
+
 b_cont_test_wk_priors <- brm(
-  anx_s|weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
+  anx_s | weights(ipwCH) ~ bs(ch_s) + (1 + ch_s | country),
   data = d1p,
-   prior = c(
-    prior(normal(0, 2.5), class = Intercept),
-    prior(normal(0, 1), class = b)),
+  prior = c(prior(normal(0, 2.5), class = Intercept),
+            prior(normal(0, 1), class = b)),
   seed = 1234,
   warmup = 1000,
   iter = 2000,
@@ -1798,34 +1458,41 @@ b_cont_test_wk_priors <- brm(
 
 
 
-con_wk_priors<-brms::conditional_effects(b_cont_test_wk_priors, "ch_s", 
-                              spaghetti = T,
-                              ndraws = 1000,
-                              categorical = F,
-                              prob = .95,
-                              method = 'fitted')
 
-test_con_wk_priors<- plot(con_wk_priors, plot = FALSE)[[1]]   +  xlab("Service attendance (sd)") + ylab ("Anxiety (standardised)") + labs(title = "Check Priors: Baysian Mixed Effects Marginal Model", subtitle = "Sampling from weak priors only (continuous) ")   + scale_y_continuous(limits = c(-10,10))+  
+con_wk_priors <-
+  brms::conditional_effects(
+    b_cont_test_wk_priors,
+    "ch_s",
+    spaghetti = T,
+    ndraws = 1000,
+    categorical = F,
+    prob = .95,
+    method = 'fitted'
+  )
+
+test_con_wk_priors <-
+  plot(con_wk_priors, plot = FALSE)[[1]]   +  xlab("Service attendance (sd)") + ylab ("Anxiety (standardised)") + labs(title = "Check Priors: Baysian Mixed Effects Marginal Model", subtitle = "Sampling from weak priors only (continuous) ")   + scale_y_continuous(limits = c(-10, 10)) +
   theme_classic()
 test_con_wk_priors
 
 
 
-## THIS IS IT.  TO MAKE WEAKER INCREASE INTERCEPT 
+## THIS IS IT.  TO MAKE WEAKER INCREASE INTERCEPT
 b_or_test_st_priors4 <- brm(
-  anx_s|weights(ipwCH) ~ mo(ch_ord) + (1 + mo(ch_ord) | country),
+  anx_s | weights(ipwCH) ~ mo(ch_ord) + (1 + mo(ch_ord) | country),
   data = dp,
   seed = 1234,
   prior = c(
     prior(student_t(3, 0, .5), class = Intercept),
-    prior(normal(-.05,.1), class = "b"),
-    prior(dirichlet(1,1,1,1,1,1), class = "simo", coef = moch_ord1)),
+    prior(normal(-.05, .1), class = "b"),
+    prior(dirichlet(1, 1, 1, 1, 1, 1), class = "simo", coef = moch_ord1)
+  ),
   warmup = 1000,
   iter = 2000,
   chains = 4,
   sample_prior = "only",
   backend = "cmdstanr"#,
- # file = here::here("mods","b_or_test_st_priors4")
+  # file = here::here("mods","b_or_test_st_priors4")
 )
 
 prior_summary(b_or_test_st_priors4)
@@ -1833,28 +1500,27 @@ prior_summary(b_or_test_st_priors4)
 
 
 
-b_or_test_st_priors4<-brms::conditional_effects(b_or_test_st_priors4, "ch_ord", 
-                              spaghetti = T,
-                              ndraws = 1000,
-                              categorical = F,
-                              prob = .95,
-                              method = 'fitted')
+b_or_test_st_priors4 <-
+  brms::conditional_effects(
+    b_or_test_st_priors4,
+    "ch_ord",
+    spaghetti = T,
+    ndraws = 1000,
+    categorical = F,
+    prob = .95,
+    method = 'fitted'
+  )
 
-or_strong<- plot(b_or_test_st_priors4, plot = FALSE)[[1]]   +  xlab("Service attendance (monotonic)") + ylab ("Anxiety (standardised)") + labs(title = "Check Priors: Baysian Mixed Effects Marginal Model", subtitle = "Sampling from strong priors only (ordinal) ") + scale_y_continuous(limits = c(-20,15))+ 
+or_strong <-
+  plot(b_or_test_st_priors4, plot = FALSE)[[1]]   +  xlab("Service attendance (monotonic)") + ylab ("Anxiety (standardised)") + labs(title = "Check Priors: Baysian Mixed Effects Marginal Model", subtitle = "Sampling from strong priors only (ordinal) ") + scale_y_continuous(limits = c(-20, 15)) +
   theme_classic()
 or_strong
-
-
-
-
-
 
 #saveRDS(modmc, here::here("mods", "modmc.rds"))
 
 
+# Graph
 library(patchwork)
-
-
 
 test_priors <-(test_or_wk + or_strong )/(test_con_wk_priors+test_con_st) + plot_annotation(tag_levels = "a")
 
@@ -1876,11 +1542,7 @@ ggsave(
 
 
 
-
-
-
-
-
+## More priors tested
 
 ```{r}
 library(brms)
@@ -1925,10 +1587,6 @@ summary(modmc_wt_priorStrong)
 
 ```
 
-
-
-
-
 ### Checks:
 
 ```{r}
@@ -1943,93 +1601,10 @@ mcmc_plot(b_ln,
           type = "trace")
 ```
 
-### Summary of selection bias 
 
-```{r}
-set.seed(1234)
-n <- 10000 # n
-a <- rnorm(n, 0, 1) # rel service attendance
-y <- rnorm(n, -a*.2, 1) # rel service affects anxiety 
-bg <- rnorm(n, a, 1) # rel service affects belief 
-s <- rnorm(n, .2*y + .2*bg,1) # selection bias 
+### Images for DAGS in the study 
 
-dbind <-data.frame(y,a,s, bg)
-
-summary(lm(s ~  a + bg, data = dbind))
-summary(lm(s ~  a , data = dbind))
-
-
-## 
-
-set.seed(123)
-sim_fun = function() {
-n <- 10000 # n
-a <- rnorm(n, 0, 1) # rel service attendance
-y <- rnorm(n, -a*.2, 1) # rel service affects anxiety 
-l <- rnorm(n, a, 1) # rel service affects belief 
-s <- rnorm(n, .2*l - 5*y,1) # selection bias 
-
-# simulate data
-simdat <-data.frame(y, a, s, l)
-
-  sim_s <- lm(s ~ a + l, data = simdat) # belief + church
-  sim_s  # confounded 
-  summary(sim_s)
-}
-
-# Replication 1000xs
-r_lm = replicate(1000, sim_fun(), simplify = FALSE )
-
-# extract simulations
-tab_sim<-purrr::map_dfr(r_lm, broom::tidy)
-
-# extract belief coefficients
-mout<-tab_sim %>%
-  dplyr::filter(term =="l")%>%
-  dplyr::mutate_if(is.numeric, round, 5)
-
-# calculate proportion of estimates greater than 0
-# all positive
-sum(mout$estimate > 0) / length(mout$estimate)
-
-# proportion of belief coefficient p.values < .001
-sum(mout$p.value <.001) / length(mout$p.value)
-
-# extract religious service coefficients
-tout<-tab_sim %>%
-  dplyr::filter(term =="a")%>%
-  dplyr::mutate_if(is.numeric, round, 5)
-
-# calculate proportion of estimates less than 0
-# all negative
-sum(tout$estimate < 0) / length(tout$estimate)
-
-# proportion of service coefficient p.values < .001
-sum(tout$p.value <.001) / length(tout$p.value)
-```
-
-
-```{r}
-set.seed(123)
-sim_fun = function() {
-n <- 10000 # n
-a <- rnorm(n, 0, 1) # rel service attendance
-y <- rnorm(n, -a*.2, 1) # rel service affects anxiety 
-bg <- rnorm(n, a, 1) # rel service affects belief 
-s <- rnorm(n, .2*y + .2*bg,1) # selection bias 
-
-# simulate data
-simdat <-data.frame(y, a, s, bg)
-
-  sim_s <- lm(s ~  a, data = dbind) # belief + church
-  sim_s  # confounded 
-}
-
-
-
-
-```
-
+Made in TikZ, rendered in Magick and ggplot2
 
 
 ```{r}
@@ -2066,658 +1641,7 @@ ggsave(
 
 
 
-
-
-
-
-
-Coefficient plots
-
-Believe in God predicts more anxiety
-
-```{r}
-parF1 <- parameters::model_parameters(m1 ) 
-parF1
-plot(parF1,  sort = TRUE) +theme_lucid() #option -->
-```
-
-Variability in country intercepts, slope interactions not reliable.
-
-India, however, is clearly an outlier.
-
-```{r}
-parR1<-parameters::model_parameters(m1,effects = "random" ) 
-belief_random <- plot(parR1,  sort = TRUE) +theme_lucid()  + labs(title = "Country-level variability in anxiety intercepts are evident; country-level anxiety-on-belief co-variances
-are not reliable: India is an outlier.") 
-belief_random
-```
-
-No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s) 0.24 [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model.
-
-```{r}
-plot(ggeffects::ggpredict(
-  m1,
-  terms = c("country[all]", "bg_s[minmax]"),
-  type = "re",
-  ci.lvl = 0.89
-)) + scale_color_viridis_d() +  scale_y_continuous(limits = c(0,1)) + 
-  theme_bw()
-```
-
-Clear relationship between lower distress and greater religious service attendance
-
-```{r, cache = TRUE}
-library(viridis)
-p0<-brms::conditional_effects(m1, "bg_s", 
-                              spaghetti = T,
-                              ndraws = 500,
-                              categorical = F,
-                              prob = .89,
-                              method = 'fitted')
-
-
-belief_fixed <- plot(p0, plot = FALSE)[[1]]   +  xlab("belief (standardised)") + ylab ("anxiety (ordinal 1-5)") + labs(title = "Increasing belief is associated with increasing anxiety")
-belief_fixed
-```
-
-### Checks:
-
-```{r}
-# YES
-pp_check(m1)
-```
-
-Trace plots:
-
-```{r, cache = TRUE}
-mcmc_plot(m1,
-          type = "trace")
-```
-
-## Results summary: Anxiety \~ church
-
-Does church attendance predict anxiety?
-
-### Model
-
-```{r echo}
-glimpse(d1)
-m2 <- brm(
-    anx ~ ch_s +
-    age_s  +
-    male +
-    (1 + ch_s | country),
-  data = d1,
-  family = cumulative(link ="logit"),
-  seed = 1234,
-  warmup = 1000,
-  iter = 3000,
-  chains = 4,
-  file = here::here("models", "m1o_real")
-)
-
-parameters::parameters(
-  m2,
-  test = "pd",
-  priors = FALSE, 
-  effects = "all",
-  drop = TRUE,
-  group_level = FALSE,
-  diagnostic = "Rhat") %>%
-    mutate_if(is.numeric, ~ round(., 2)) %>%
-    mutate_all(funs(str_replace(., "b_", ""))) %>%
-    kable(booktabs = T, "latex", caption =  "Parameter estimates for model of Religious Service on Anxiety") %>%
-    print()
-```
-
-### Results
-
-Coefficient plots
-
-More church attendance predicts less anxiety
-
-```{r}
-parc<-parameters::model_parameters(m2 ) 
-plot(parc,  sort = TRUE) + theme_lucid() #option -->
-```
-
-Variability in country intercepts, slope interactions not reliable.
-
-India, however, is clearly an outlier.
-
-```{r}
-parcR<-parameters::model_parameters(m2,effects = "random" ) 
-church_random <- plot(parcR,  sort = TRUE) +theme_lucid() + labs(title = "Country-level variability in anxiety intercepts are evident; country-level anxiety-on-service co-variances
-are not reliable: India is again an outlier.")
-
-church_random
-```
-
-No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s) 0.24 [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model.
-
-```{r}
-plot(ggeffects::ggpredict(
-  m2,
-  terms = c("country[all]", "ch_s[minmax]"),
-  type = "re",
-  ci.lvl = 0.89
-)) + scale_color_viridis_d() + 
-  theme_classic()
-```
-
-Clear relationship between lower distress and greater religious service attendance
-
-```{r, cache = TRUE}
-library(viridis)
-p0b<-brms::conditional_effects(m2, "ch_s", 
-                              spaghetti = T,
-                              ndraws = 500,
-                              categorical =T,
-                              prob = .89,
-                              method = 'fitted')
-
-
-church_fixed <-plot(p0b, plot = FALSE)[[1]]  + xlab("religious service attendance (standardised)") + ylab ("anxiety (ordinal 1-5)") +
-  labs(title = "Increasing religious service attendence is associated with lower anxiety")
-
-church_fixed
-```
-
-## Results summary Belief \~ Anxiety
-
-```{r}
-m3<- brm(
-  bg_s ~
-    mo(anx)+
-    ch_s +
-    age_s  +
-    male +
-    (1 + mo(anx)| country),
-  data = d1,
-  seed = 1234,
-  warmup = 1000,
-  iter = 3000,
-  chains = 4,
-  file = here::here("models", "m3o_real")
-)
-
-parameters::model_parameters(m3, test = "p_direction")
-brms::ranef(m3)
-
-parameters::parameters(
-  m3,
-  test = "pd",
-  priors = FALSE, 
-  effects = "all",
-  drop = TRUE,
-  group_level = FALSE,
-  diagnostic = "Rhat") %>%
-    mutate_if(is.numeric, ~ round(., 2)) %>%
-    mutate_all(funs(str_replace(., "b_", ""))) %>%
-    kable(booktabs = T, "latex", caption =  "Parameter estimates for model of Anxiety on Belief") %>%
-    print()
-```
-
-<!-- ```{r} -->
-
-<!-- this is no better -->
-
-<!-- m3a<- brm( -->
-
-<!--   bg_s ~ -->
-
-<!--     anx_s+ -->
-
-<!--     ch_s + -->
-
-<!--     age_s  + -->
-
-<!--     male + -->
-
-<!--     (1 + anx_s | country), -->
-
-<!--   data = d1, -->
-
-<!--   seed = 1234, -->
-
-<!--   warmup = 1000, -->
-
-<!--   iter = 3000, -->
-
-<!--   chains = 4, -->
-
-<!--   file = here::here("models", "m3a") -->
-
-<!-- ) -->
-
-<!-- parameters::model_parameters(m3a, test = "p_direction") -->
-
-<!-- brms::ranef(m3a) -->
-
-<!-- summary(m3a) -->
-
-<!-- hist(d1$bg_s) -->
-
-<!-- # YES -->
-
-<!-- pp_check(m3a) -->
-
-<!-- ``` -->
-
-Coefficient plots
-
-Anxiety predicts belief
-
-```{r}
-parF3 <- parameters::model_parameters(m3 ) 
-parF3
-plot(parF3,  sort = TRUE) +theme_lucid() #option -->
-```
-
-Variability in country intercepts, slope interactions not reliable.
-
-India, however, is clearly an outlier.
-
-```{r}
-parR3<-parameters::model_parameters(m3,effects = "random" ) 
-anx_belief_random <- plot(parR3,  sort = TRUE) +theme_lucid()  + labs(title = "Country-level variabilty in belief intercepts are evident; country-level belief-on-anxiety co-variances
-are not reliable.") 
-
-
-anx_belief_random
-```
-
-No country level differences trending at the high end of the anxiety scale for slope/intercept covariance, but not at the low end of anxiety this pattern is reversed, leading to a canceling out ... such that overall the correlation isn't reliable [cor(Intercept,ch_s) 0.24 [-0.38, 0.77]. But worth investigating...and perhaps a more complex mixture model.
-
-```{r}
-plot(ggeffects::ggpredict(
-  m3,
-  terms = c("country[all]", "anx"),
-  type = "re",
-  ci.lvl = 0.89
-)) + scale_color_viridis_d() +  scale_y_continuous(limits = c(0,1)) + 
-  theme_bw()
-```
-
-```{r, cache = TRUE}
-library(viridis)
-p3<-brms::conditional_effects(m3, "anx", 
-                              spaghetti = T,
-                              ndraws = 500,
-                              categorical = F,
-                              prob = .89,
-                              method = 'fitted')
-
-
-belief_anxiety_random_fixed <- plot(p3, plot = FALSE)[[1]]   + xlab("Anxiety (monotonic ordinal 1-5)") + ylab ("Belief in God( standardised))") +
-  labs(title = "Increasing anxiety is associated with increasing belief in God")
-
-belief_anxiety_random_fixed
-```
-
-### Checks:
-
-```{r}
-# YES
-pp_check(m3)
-```
-
-Trace plots:
-
-```{r, cache = TRUE}
-mcmc_plot(m3,
-          type = "trace")
-```
-
-## Results summary Church \~ Anxiety
-
-```{r}
-m4<- brm(
-  ch_s ~
-    mo(anx)+
-    age_s  +
-    male +
-    (1 + mo(anx)| country),
-  data = d1,
-  seed = 1234,
-  warmup = 1000,
-  iter = 3000,
-  chains = 4,
-  file = here::here("models", "m4o_real")
-)
-
-parameters::model_parameters(m4, test = "p_direction")
-brms::ranef(m4)
-
-
-parameters::parameters(
-  m4,
-  test = "pd",
-  priors = FALSE, 
-  effects = "all",
-  drop = TRUE,
-  group_level = FALSE,
-  diagnostic = "Rhat") %>%
-    mutate_if(is.numeric, ~ round(., 2)) %>%
-    mutate_all(funs(str_replace(., "b_", ""))) %>%
-    kable(booktabs = T, "latex", caption =  "Parameter estimates for model of Anxiety on Religious Service") %>%
-    print()
-```
-
-<!-- ```{r} -->
-
-<!-- this is no better -->
-
-<!-- m3a<- brm( -->
-
-<!--   bg_s ~ -->
-
-<!--     anx_s+ -->
-
-<!--     ch_s + -->
-
-<!--     age_s  + -->
-
-<!--     male + -->
-
-<!--     (1 + anx_s | country), -->
-
-<!--   data = d1, -->
-
-<!--   seed = 1234, -->
-
-<!--   warmup = 1000, -->
-
-<!--   iter = 3000, -->
-
-<!--   chains = 4, -->
-
-<!--   file = here::here("models", "m3a") -->
-
-<!-- ) -->
-
-<!-- parameters::model_parameters(m3a, test = "p_direction") -->
-
-<!-- brms::ranef(m3a) -->
-
-<!-- summary(m3a) -->
-
-<!-- hist(d1$bg_s) -->
-
-<!-- # YES -->
-
-<!-- pp_check(m3a) -->
-
-<!-- ``` -->
-
-Coefficient plots
-
-Anxiety predicts belief
-
-```{r}
-parF4 <- parameters::model_parameters(m4 ) 
-parF4
-plot(parF4,  sort = TRUE) +theme_lucid() #option -->
-```
-
-Variability in country intercepts, slope interactions not reliable.
-
-India, however, is clearly an outlier.
-
-```{r}
-par4<-parameters::model_parameters(m4,effects = "random" ) 
-anx_church_random <- plot(par4,  sort = TRUE) + theme_lucid()  + labs(title = "Country-level variabilty in religious service intercepts are evident; country-level service-on-anxiety co-variances
-are not reliable.") 
-
-
-anx_church_random
-```
-
-```{r}
-plot(ggeffects::ggpredict(
-  m4,
-  terms = c("country[all]", "anx"),
-  type = "re",
-  ci.lvl = 0.89
-)) + scale_color_viridis_d() +  scale_y_continuous(limits = c(0,1)) + 
-  theme_bw()
-```
-
-```{r, cache = TRUE}
-library(viridis)
-p4<-brms::conditional_effects(m4, "anx", 
-                              spaghetti = T,
-                              ndraws = 500,
-                              categorical = F,
-                              prob = .89,
-                              method = 'fitted')
-
-
-church_anxiety_random_fixed <- plot(p4, plot = FALSE)[[1]]   + xlab("Anxiety (monotonic ordinal 1-5)") + ylab ("Religious Service(standardised))") +
-  labs(title = "Increasing anxiety is associated with decreasing church attendance.")
-
-church_anxiety_random_fixed
-```
-
-### Checks:
-
-```{r}
-# YES
-pp_check(m4)
-```
-
-Trace plots:
-
-```{r, cache = TRUE}
-mcmc_plot(m4,
-          type = "trace")
-```
-
-## Combined plot
-
-```{r}
-library(patchwork)
-
-(belief_fixed +  belief_random)/(church_fixed+ church_random  ) / 
-(belief_anxiety_random_fixed + anx_belief_random) / (church_anxiety_random_fixed + anx_church_random) +
-  plot_annotation(tag_levels = "a")# + plot_layout(guides = "collect")
-
-# coef_graph 15 x 25
-```
-
-### Checks:
-
-```{r}
-# YES
-pp_check(m2)
-```
-
-Trace plots:
-
-```{r, cache = TRUE}
-mcmc_plot(m2,
-          type = "trace")
-```
-
-### Overall summary
-
-Belief in God predicts anxiety. This is consistent with theories that anxiety leads to greater demand for belif in God. However, this question awaits future research.
-
-Church attendance positively predicts lower anxiety.
-
-### Group level-predictions
-
-There is substantial variation in country-level intercepts for anxiety. And substantial cultural level variation in religious practice and belief. All this needs to be explained. India is an outlier.
-
-## Simulation
-
-```{r}
-set.seed(123)
-n <- 1000
-# distressing events (unmeasured)
-U <- rnorm( n ) 
-# religious service attendance increases with distress
-C <- rnorm( n, U ) 
-# anxiety caused by distress experience and
-# buffered by religious service
-Y <- rnorm( n , U - C )  
-
-# belief increases with service, anxiety,
-# and experience
-B <- rnorm( n , Y + C + U )
-
-
-# simulate data
-simdat <- data.frame(
-  Belief = B, # belief
-  ReligiousService = C, # religious service
-  U = U, # distressing events (unmeasured)
-  Anxiety = Y  # outcome
-  )
-
-# summarise results
-summary(
-  mod1 <- lm(Anxiety ~ Belief + ReligiousService, data = simdat)
-)
-
-# summarise results
-summary(
-  mod1b <- lm(Anxiety ~ ReligiousService, data = simdat)
-)
-
-summary(
-  mod2 <- lm(Belief  ~ Anxiety + ReligiousService, data = simdat)
-)
-
-summary(
-  mod3 <- lm(ReligiousService  ~ Anxiety, data = simdat)
-)
-
-belief_on_anxiety_sim <- plot( ggeffects::ggpredict(mod1, terms = c("Belief")), add.data = TRUE, dot.alpha =.5 ) + labs(title = "Simulation recovers positive relationship between belief on anxiety") + scale_y_continuous(limits = c(-7,7))+ scale_x_continuous(limits = c(-10,10))
-
-service_on_anxiety_sim <- plot( ggeffects::ggpredict(mod1b, terms = c("ReligiousService")), add.data = TRUE, dot.alpha =.5 ) + labs(title = "Simulation recovers negative relationship between religious service on anxiety")+ scale_y_continuous(limits = c(-7,7))+ scale_y_continuous(limits = c(-7,7))+ scale_x_continuous(limits = c(-10,10))
-service_on_anxiety_sim
-
-service_on_anxiety_sim <- plot( ggeffects::ggpredict(mod1, terms = c("ReligiousService")), add.data = TRUE, dot.alpha =.5 ) + labs(title = "Simulation recovers negative relationship between religious service on anxiety")+ scale_y_continuous(limits = c(-7,7))+ scale_x_continuous(limits = c(-10,10))
-service_on_anxiety_sim
-
-anxiety_on_belief_sim <- plot( ggeffects::ggpredict(mod2, terms = c("Anxiety")), add.data = TRUE, dot.alpha =.5 ) + labs(title = "Simulation recovers positive relationship between anxiety on belief")+ scale_y_continuous(limits = c(-7,7))+ scale_x_continuous(limits = c(-10,10))
-anxiety_on_belief_sim
-
-
-anxiety_on_church_sim <- plot( ggeffects::ggpredict(mod3, terms = c("Anxiety")), add.data = TRUE, dot.alpha =.5 ) + labs(title = "Simulation recovers negative relationship between anxiety on religious service")+ scale_y_continuous(limits = c(-7,7))
-anxiety_on_church_sim
-
-library(patchwork)
-
-(belief_on_anxiety_sim +  service_on_anxiety_sim)/ (anxiety_on_belief_sim + anxiety_on_church_sim)
-
-# sim_graph 15 x 15
-
-```
-
-We can convince ourselves of this result by replicating it many times
-
-```{r}
-sim_fun = function() {
-n <- 1000
-U <- rnorm( n ) # distressing events (unmeasured)
-C <- rnorm( n, U ) # religious service attendance, increase with distress
-Y <- rnorm( n , U - C ) # measured distress caused by distress, reduced by church attendance. 
-B <- rnorm( n , Y + C + U )# belief increase with service + distressing events + anxiety
-
-# simulate data
-simdat <- data.frame(
-  Belief = B, # belief
-  ReligiousService = C, # religious service
-  U = U, # distressing events (unmeasured)
-  Anxiety = Y  # outcome
-  )
-
-  sim_s <- lm(Anxiety ~ Belief + ReligiousService, data = simdat)
-  sim_s
-}
-
-# Replication 1000xs
-r_lm = replicate(1000, sim_fun(), simplify = FALSE )
-
-# extract simulations
-tab_sim<-purrr::map_dfr(r_lm, broom::tidy)
-
-# extract belief coefficients
-mout<-tab_sim %>%
-  dplyr::filter(term =="Belief")%>%
-  dplyr::mutate_if(is.numeric, round, 5)
-
-# calculate proportion of estimates greater than 0
-# all positive
-sum(mout$estimate > 0) / length(mout$estimate)
-
-# proportion of belief coefficient p.values < .001
-sum(mout$p.value <.001) / length(mout$p.value)
-
-# extract religious service coefficients
-tout<-tab_sim %>%
-  dplyr::filter(term =="ReligiousService")%>%
-  dplyr::mutate_if(is.numeric, round, 5)
-
-# calculate proportion of estimates less than 0
-# all negative
-sum(tout$estimate < 0) / length(tout$estimate)
-
-# proportion of service coefficient p.values < .001
-sum(tout$p.value <.001) / length(tout$p.value)
-```
-
-˝## Simulation tables
-
-```{r}
-parameters::parameters(
-  mod1,
-  test = "pd",
-  priors = FALSE, 
-  effects = "all",
-  drop = TRUE,
-  group_level = FALSE,
-  diagnostic = "Rhat") %>%
-    mutate_if(is.numeric, ~ round(., 2)) %>%
-    mutate_all(funs(str_replace(., "b_", ""))) %>%
-    kable(booktabs = T, "latex", caption =  "Simulation reveals how church attendance and belief can deviate where distress increases religious service attendance and belief in God") %>%
-    print()
-
-
-
-
-parameters::parameters(
-  mod2,
-  test = "pd",
-  priors = FALSE, 
-  effects = "all",
-  drop = TRUE,
-  group_level = FALSE,
-  diagnostic = "Rhat") %>%
-    mutate_if(is.numeric, ~ round(., 2)) %>%
-    mutate_all(funs(str_replace(., "b_", ""))) %>%
-    kable(booktabs = T, "latex", caption =  "Same simulation tracks anxiety as cause of religious belief") %>%
-    print()
-
-
-
-parameters::parameters(
-  mod3,
-  test = "pd",
-  priors = FALSE, 
-  effects = "all",
-  drop = TRUE,
-  group_level = FALSE,
-  diagnostic = "Rhat") %>%
-    mutate_if(is.numeric, ~ round(., 2)) %>%
-    mutate_all(funs(str_replace(., "b_", ""))) %>%
-    kable(booktabs = T, "latex", caption =  "Same simulation tracks anxiety as cause of decling religious service") %>%
-    print()
-```
-
-## DETAILS OF ANLAYSIS FOR REPLICATION
+## DETAILS OF ANLAYSIS FROM PREVIOUS ITERATIONS OF THE STUDY
 
 ## Workflow and analysis
 
@@ -3221,7 +2145,7 @@ Even this prior is diffuse.
 
 We'll return to our priors and sampling distribution at the next iteration of this analysis. Let's set this to the side for now, and focus on the country level variability, looking first at the expectation plots.
 
-#### The group level effects of country
+#### The group level variances of country
 
 There is lots of variability at the country level intercepts for anxiety. We can see that India is over .5 standard deviations less anxious than the average culture level anxiety. By contrast, Japan, Israel, and France are over .3 standard deviations more anxious than average. There looks to be perhaps some covariance between the country intercepts and slopes... maybe though all estimates crosses zero. We'd either want to use stronger priors or collect data from more countries than are in this sample.
 
@@ -3653,40 +2577,6 @@ plot(p0b, plot = FALSE)[[1]]   + xlab("ch_s") + ylab ("anxiety 1-5") +
 <!-- ``` -->
 
 ### Results: church
-
-Which we interpret as follows:
-
--   Countries have different levels of anxiety;
-
--   Within a country, those whose who participate more frequently in church can be expected to have higher anxiety as those who do not participate as frequently in church.
-
--   Between_country predictions trend in the opposite direction, though not reliably at the high end of the anxiety spectrum this indicates.
-
-Let's look at the country-level variances more closely
-
-```{r}
-par<-parameters::model_parameters(m1o,effects = "random" ) 
-plot(par,  sort = TRUE) +theme_lucid() #option -->
-```
-
-Countries who differ in their average levels of church attendance differ present differences in their expected anxiety levels, with an unreliable trend in the opposite direction.
-
-## Belief in God
-
-Lets consider the non-trivial theory that belief in God (bg) affects psychological anxiety (wb) by affording a sense of meaning in life.
-
-We begin by drawing the dag.
-
-And again, we face a collider bias. Our causal model shows us that if we were to include our meaning-making indicator in our statistical we will compromise inference!
-
-```{r}
-ggdag::ggdag_collider(dg1,
-                      from = "church",
-                      to = "wb",
-                      controlling_for(c("male", "support", "country", "age")))
-```
-
-We find weak effect for belief in God. No correlation of intercept and slope but India is an outlier.
 
 ```{r cache = TRUE}
 p <- brms::conditional_effects(

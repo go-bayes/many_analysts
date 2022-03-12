@@ -37,33 +37,18 @@ knitr::opts_chunk$set(#
 # source("funs.R") # custom functions
 library("tidyverse")
 library("easystats")
-library("ggplot2") #plots
-#library("sjstats") #test statistics
-#library("sjPlot")
-#library("sjmisc")
-##library("insight")
-#library("see")
-#library("performance")
 library("ggraph")
-#library("parameters")
 library("lme4")
-#library("psych") ## correlation matrix
 library("table1")
 library("ggeffects")
-#library("gghighlight")
-#library("texreg")
 library("kableExtra")
-#library("naniar") # missingness
+library("naniar") # missingness
 library("Amelia")
-#library("magrittr")
 library("patchwork")
 library("texreg")
 library("viridisLite")
 library("patchwork")
 library("here")
-#library("rethinking")
-#library("statsExpressions")
-#library("ggstatsplot")
 library("ggthemes")
 =library("rstan")
 library("brms")

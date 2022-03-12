@@ -39,6 +39,11 @@ vignettes/*.html
 .Renviron
 
 *.rds
-Figs/*.html
+<<<<<<< Updated upstream
+#Figs/*.html
+=======
+#Figs/
+*.html
+>>>>>>> Stashed changes
 # allow analysis to update to git
-!analysis.html
+#!analysis.html
